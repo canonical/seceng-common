@@ -1,0 +1,86 @@
+[project]
+name = "charmlibs-seceng"
+description = "A library to simplify charms for the Security Engineering team at Canonical."
+license = "LGPL-3.0-only"
+authors = [
+    {name="The Security Engineering team at Canonical Ltd."},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Development Status :: 5 - Production/Stable",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "ops>=2.19,<3",
+]
+dynamic = ["version"]
+
+[dependency-groups]
+lint = [
+    "typing_extensions",
+]
+
+[project.urls]
+"Repository" = "https://github.com/canonical/seceng-common"
+"Issues" = "https://github.com/canonical/seceng-common/issues"
+
+[build-system]
+requires = [
+    "setuptools >=80",
+    "setuptools_scm >=8",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+root = ".."
+version_scheme = "no-guess-dev"
+local_scheme = "dirty-tag"
+
+[tool.setuptools.package-data]
+"charmlibs.seceng" = ["*.yaml"]
+
+# Testing tools configuration
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+# Linting tools configuration
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "W", "F", "C", "N", "D", "I001"]
+lint.extend-ignore = [
+    "D105",
+    "D107",
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+    "I001",
+]
+extend-exclude = ["__pycache__", "*.egg_info"]
+lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+format.quote-style = "preserve"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
+
+[tool.pyright]
+include = ["src/**.py"]
