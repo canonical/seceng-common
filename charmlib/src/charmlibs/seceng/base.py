@@ -81,7 +81,7 @@ class SecEngCharmBase(ops.CharmBase):
                 continue
             if name not in all_secrets:
                 continue
-            logging.warning("Processing secret '{}'...".format(name))
+            logging.warning(f"Processing secret '{name}'...")
             secret_entry = all_secrets[name]
             user = secret_entry['user'] if 'user' in secret_entry else None
             group = secret_entry['group'] if 'group' in secret_entry else None
@@ -106,4 +106,4 @@ class SecEngCharmBase(ops.CharmBase):
                     file_path.chmod(int(file['permission'], 0))
                 if user and group:
                     shutil.chown(file_path, user, group)
-                logging.info("Created secrets file '{}'.".format(file_path))
+                logging.info(f"Created secrets file '{file_path}'.")
