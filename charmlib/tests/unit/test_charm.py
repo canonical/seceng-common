@@ -9,6 +9,7 @@ import collections.abc
 import contextlib
 import os
 import pathlib
+import pwd
 import stat
 import tempfile
 
@@ -69,6 +70,7 @@ def test_install_secrets_file(context: testing.Context[SecEngCharmBase], tmpdir:
         secrets_config = SecretsRoot(
             {
                 'test1': SecretConfig(
+                    user=pwd.getpwuid(os.getuid()).pw_name,
                     files=[
                         FileConfig(
                             name=str(tmpdir / 'test1-secret-file'),
