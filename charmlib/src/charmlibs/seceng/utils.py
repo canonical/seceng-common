@@ -92,6 +92,7 @@ def open_file_secure(
         seen_dirs: set[tuple[int, int]] = set()
         directory_components = deque(parent.name for parent in reversed(path.parents) if parent.name)
         directory_components.appendleft(path.anchor)
+        assert len(directory_components) > 0  # Needed by logic below.
         while directory_components:
             directory_name = directory_components.popleft()
             if directory_name:
@@ -139,6 +140,9 @@ def open_file_secure(
                 directory_components.appendleft('')
             elif not stat.S_ISDIR(dir_stat.st_mode):
                 raise PermissionError("component in path is not a symlink or a directory")
+
+        if stat.S_IMODE(dir_stat.st_mode) & (stat.S_IWGRP | stat.S_IWOTH):
+            raise PermissionError("last directory in the path must only be writable by the owner")
 
         file_fd = os.open('.', flags=os.O_TMPFILE | os.O_WRONLY, mode=mode, dir_fd=dir_fd)
         exit_stack.callback(os.close, file_fd)
