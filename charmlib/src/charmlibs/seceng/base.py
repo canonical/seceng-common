@@ -8,6 +8,8 @@ Module providing base charm classes for common functionality used by the
 Security Engineering team at Canonical.
 """
 
+import collections.abc
+import dataclasses
 import importlib.resources
 import logging
 import pathlib
@@ -16,8 +18,42 @@ import subprocess
 from pathlib import Path
 
 import ops
+import pydantic
 import yaml
 from ops.model import ActiveStatus, MaintenanceStatus
+
+
+@dataclasses.dataclass(kw_only=True)
+class FileConfig:
+    name: str
+    permission: str | None = None
+    variables: dict[str, str]
+    template: str
+
+
+class SecretConfig(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra='forbid')
+
+    user: str | None = None
+    group: str | None = None
+    files: list[FileConfig]
+
+
+class SecretsRoot(pydantic.RootModel[dict[str, SecretConfig]]):
+    def __len__(self) -> int:
+        return len(self.root)
+
+    def __iter__(self) -> collections.abc.Iterator[str]:  # type: ignore[override]
+        return iter(self.root)
+
+    def __getitem__(self, name: str) -> SecretConfig:
+        return self.root[name]
+
+    def __contains__(self, name: str) -> bool:
+        return name in self.root
+
+    def items(self) -> collections.abc.Iterable[tuple[str, SecretConfig]]:
+        return self.root.items()
 
 
 class SecEngCharmBase(ops.CharmBase):
@@ -72,38 +108,46 @@ class SecEngCharmBase(ops.CharmBase):
 
     def _install_secrets_file(self, filepath: pathlib.Path) -> None:
         with open(filepath, 'r') as file:
-            all_secrets = yaml.safe_load(file)  # type: ignore[no-untyped-call]
+            try:
+                all_secrets = SecretsRoot.model_validate(yaml.safe_load(file))  # type: ignore[no-untyped-call]
+            except pydantic.ValidationError:
+                logging.error(f"Failed to load secrets configuration file '{filepath}.'")
+                raise
 
         for name, secret_id in self.config.items():
-            assert isinstance(secret_id, str)
             option_type = self.meta.config.get(name)
             if not option_type or option_type.type != 'secret':
                 continue
             if name not in all_secrets:
                 continue
+            if not isinstance(secret_id, str):
+                logging.warning(
+                    f"Unexpected type for charm configuration item '{name}'"
+                    f" of type 'secret': {type(secret_id).__name__}."
+                )
+                continue
+
             logging.warning(f"Processing secret '{name}'...")
             secret_entry = all_secrets[name]
-            user = secret_entry['user'] if 'user' in secret_entry else None
-            group = secret_entry['group'] if 'group' in secret_entry else None
 
             secret_object = self.model.get_secret(id=secret_id)
             secret_content = secret_object.get_content(refresh=True)
 
-            for file in secret_entry['files']:
+            for file_entry in secret_entry.files:
                 variables = {}
-                for variable in file['variables']:
-                    variables[variable] = secret_content[file['variables'][variable]]
+                for varname, varvalue in file_entry.variables.items():
+                    variables[varname] = secret_content[varvalue]
 
-                file_path = Path(file['name'])
+                file_path = Path(file_entry.name)
                 if not file_path.parent.exists():
                     file_path.parent.mkdir(parents=True, exist_ok=True)
-                    if user and group:
-                        shutil.chown(file_path.parent, user, group)
+                    if secret_entry.user and secret_entry.group:
+                        shutil.chown(file_path.parent, secret_entry.user, secret_entry.group)
 
                 with open(file_path, 'w') as f:
-                    f.write(file['template'].format(**variables))
-                if 'permission' in file:
-                    file_path.chmod(int(file['permission'], 0))
-                if user and group:
-                    shutil.chown(file_path, user, group)
+                    f.write(file_entry.template.format(**variables))
+                if file_entry.permission:
+                    file_path.chmod(int(file_entry.permission, 0))
+                if secret_entry.user and secret_entry.group:
+                    shutil.chown(file_path, secret_entry.user, secret_entry.group)
                 logging.info(f"Created secrets file '{file_path}'.")
