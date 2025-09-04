@@ -26,6 +26,7 @@ def context() -> collections.abc.Iterator[testing.Context[SecEngCharmBase]]:
         SecEngCharmBase,
         config={
             'options': {
+                'deployment': {'type': 'string'},
                 'test1': {'type': 'secret'},
             },
         },
@@ -43,7 +44,13 @@ def tmpdir() -> collections.abc.Iterator[pathlib.Path]:
 
 def test_config_changed_state(context: testing.Context[SecEngCharmBase]) -> None:
     # Arrange:
-    state_in = testing.State.from_context(context, leader=True)
+    state_in = testing.State.from_context(
+        context,
+        leader=True,
+        config={
+            'deployment': 'test',
+        },
+    )
 
     # Act:
     state_out = context.run(context.on.config_changed(), state_in)
@@ -92,6 +99,7 @@ def test_install_secrets_file(context: testing.Context[SecEngCharmBase], tmpdir:
             leader=True,
             config={
                 'test1': f'{secret_test1.id}',
+                'deployment': 'test',
             },
             secrets={
                 secret_test1,

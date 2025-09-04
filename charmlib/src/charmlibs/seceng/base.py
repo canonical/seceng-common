@@ -14,6 +14,7 @@ import importlib.resources
 import logging
 import pathlib
 import subprocess
+import typing
 
 import ops
 import pydantic
@@ -68,22 +69,17 @@ class SecEngCharmBase(ops.CharmBase):
 
     secrets_config: str | None = None
 
+    _stored = ops.StoredState()  # type: ignore[no-untyped-call]
+
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
-        framework.observe(self.on.install, self._seceng_base_on_install)
-        framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrade)
         framework.observe(self.on.config_changed, self._seceng_base_on_config_changed)
         framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
 
-    def _seceng_base_on_install(self, event: ops.InstallEvent) -> None:
-        self._install_ppa_and_packages()
-        self.unit.status = ActiveStatus('ready')
-
-    def _seceng_base_on_upgrade(self, event: ops.UpgradeCharmEvent) -> None:
-        self._install_ppa_and_packages()
-        self.unit.status = ActiveStatus('ready')
+        self._stored.set_default(configured_ppa='', installed_packages=set())
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        self._install_ppa_and_packages()
         self._install_secrets()
         self.unit.status = ActiveStatus('ready')
 
@@ -92,11 +88,20 @@ class SecEngCharmBase(ops.CharmBase):
             self._install_secrets(filter_secrets={event.secret.id})
 
     def _install_ppa_and_packages(self) -> None:
-        self.unit.status = MaintenanceStatus('Installing Debian Package')
-        subprocess.check_call(["apt-get", "update"])
-        subprocess.check_call(["add-apt-repository", f'ppa:{self.package_install_ppa}/{self.config["deployment"]}'])
-        subprocess.check_call(["apt-get", "update"])
-        if self.package_install_list:
+        if not self.package_install_list:
+            return
+
+        new_ppa = f'ppa:{self.package_install_ppa}/{self.config["deployment"]}'
+        if new_ppa != typing.cast(str, self._stored.configured_ppa):
+            self.unit.status = MaintenanceStatus('Configuring PPA')
+            self._stored.configured_ppa = new_ppa
+            subprocess.check_call(["add-apt-repository", new_ppa])
+            subprocess.check_call(["apt-get", "update"])
+            self._stored.installed_packages = set()  # Force reinstallation of packages when PPA changes.
+
+        if set(self.package_install_list) != typing.cast(set[str], self._stored.installed_packages):
+            self.unit.status = MaintenanceStatus('Installing Debian Package')
+            self._stored.installed_packages = set(self.package_install_list)
             subprocess.check_call(["apt-get", "install", "-y"] + self.package_install_list)
 
     def _install_secrets(self, *, filter_secrets: set[str] = set()) -> None:
