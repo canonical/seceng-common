@@ -73,6 +73,7 @@ class SecEngCharmBase(ops.CharmBase):
         framework.observe(self.on.install, self._seceng_base_on_install)
         framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrade)
         framework.observe(self.on.config_changed, self._seceng_base_on_config_changed)
+        framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
 
     def _seceng_base_on_install(self, event: ops.InstallEvent) -> None:
         self._install_ppa_and_packages()
@@ -86,6 +87,10 @@ class SecEngCharmBase(ops.CharmBase):
         self._install_secrets()
         self.unit.status = ActiveStatus('ready')
 
+    def _seceng_base_on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        if event.secret.id is not None:
+            self._install_secrets(filter_secrets={event.secret.id})
+
     def _install_ppa_and_packages(self) -> None:
         self.unit.status = MaintenanceStatus('Installing Debian Package')
         subprocess.check_call(["apt-get", "update"])
@@ -94,19 +99,19 @@ class SecEngCharmBase(ops.CharmBase):
         if self.package_install_list:
             subprocess.check_call(["apt-get", "install", "-y"] + self.package_install_list)
 
-    def _install_secrets(self) -> None:
+    def _install_secrets(self, *, filter_secrets: set[str] = set()) -> None:
         # This method should not be called on the install or upgrade hook,
         # because it may rely on package installation from
         self.unit.status = MaintenanceStatus('Installing Secrets')
         logging.warning("About to install secrets...")
 
         with importlib.resources.as_file(importlib.resources.files() / 'secrets.yaml') as filepath:
-            self._install_secrets_file(filepath)
+            self._install_secrets_file(filepath, filter_secrets=filter_secrets)
 
         if self.secrets_config is not None:
-            self._install_secrets_file(self.charm_dir / self.secrets_config)
+            self._install_secrets_file(self.charm_dir / self.secrets_config, filter_secrets=filter_secrets)
 
-    def _install_secrets_file(self, filepath: pathlib.Path) -> None:
+    def _install_secrets_file(self, filepath: pathlib.Path, *, filter_secrets: set[str] = set()) -> None:
         with open(filepath, 'r') as file:
             try:
                 all_secrets = SecretsRoot.model_validate(yaml.safe_load(file))  # type: ignore[no-untyped-call]
@@ -125,6 +130,8 @@ class SecEngCharmBase(ops.CharmBase):
                     f"Unexpected type for charm configuration item '{name}'"
                     f" of type 'secret': {type(secret_id).__name__}."
                 )
+                continue
+            if filter_secrets and secret_id not in filter_secrets:
                 continue
 
             logging.warning(f"Processing secret '{name}'...")
