@@ -109,3 +109,84 @@ def test_config_invalid() -> None:
                 ]
             }
         })  # fmt: skip
+
+    # Missing debconf name
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'package': '',
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Missing debconf package
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Missing debconf template
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong debconf name type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': 0,
+                        'package': '',
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong debconf package type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': 0,
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong file templates type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': '',
+                        'template': 0,
+                    },
+                ]
+            }
+        })  # fmt: skip

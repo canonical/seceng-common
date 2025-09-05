@@ -14,6 +14,7 @@ import importlib.resources
 import logging
 import pathlib
 import subprocess
+import sys
 import typing
 
 import ops
@@ -22,6 +23,13 @@ import yaml
 from ops.model import ActiveStatus, MaintenanceStatus
 
 from . import utils
+
+
+@dataclasses.dataclass(kw_only=True)
+class DebconfConfig:
+    name: str
+    package: str
+    template: str
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -36,7 +44,8 @@ class SecretConfig(pydantic.BaseModel):
 
     user: str | None = None
     group: str | None = None
-    files: list[FileConfig]
+    debconf: list[DebconfConfig] = []
+    files: list[FileConfig] = []
 
 
 class SecretsRoot(pydantic.RootModel[dict[str, SecretConfig]]):
@@ -116,12 +125,15 @@ class SecEngCharmBase(ops.CharmBase):
             self._install_secrets_file(self.charm_dir / self.secrets_config, filter_secrets=filter_secrets)
 
     def _install_secrets_file(self, filepath: pathlib.Path, *, filter_secrets: set[str] = set()) -> None:
+        logging.debug("Parsing secrets file '{}'...".format(filepath))
         with open(filepath, 'r') as file:
             try:
                 all_secrets = SecretsRoot.model_validate(yaml.safe_load(file))  # type: ignore[no-untyped-call]
             except pydantic.ValidationError:
                 logging.error(f"Failed to load secrets configuration file '{filepath}.'")
                 raise
+
+        debconf_selections: list[str] = []
 
         for name, secret_id in self.config.items():
             option_type = self.meta.config.get(name)
@@ -144,6 +156,20 @@ class SecEngCharmBase(ops.CharmBase):
             secret_object = self.model.get_secret(id=secret_id)
             secret_content = secret_object.get_content(refresh=True)
 
+            for debconf_entry in secret_entry.debconf:
+                value = debconf_entry.template.format(**secret_content)
+                try:
+                    value = subprocess.check_output(
+                        ['debconf-escape', '-e'],
+                        input=value,
+                        text=True,
+                        encoding=sys.stdin.encoding,
+                    )
+                except subprocess.CalledProcessError as e:
+                    raise ValueError(f"failed to escape debconf value '{value}': exit code {e.returncode}")
+                debconf_selections.append(f'{debconf_entry.package} {debconf_entry.name} password {value}')
+                logging.info(f"Queueing debconf option '{debconf_entry.name}' for package '{debconf_entry.package}'.")
+
             for file_entry in secret_entry.files:
                 with utils.open_file_secure(
                     pathlib.Path(file_entry.name),
@@ -154,3 +180,19 @@ class SecEngCharmBase(ops.CharmBase):
                 ) as f:
                     f.write(file_entry.template.format(**secret_content))
                 logging.info(f"Created secrets file '{file_entry.name}'.")
+
+        if debconf_selections:
+            try:
+                subprocess.run(
+                    ['debconf-set-selections'],
+                    input='\n'.join(debconf_selections),
+                    text=True,
+                    encoding=sys.stdin.encoding,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise ValueError(f"failed to run debconf-set-selections: exit code {e.returncode}")
+            else:
+                logging.info(f"Successfully set {len(debconf_selections)} debconf options.")
+        else:
+            logging.debug("No debconf options configured.")
