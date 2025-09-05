@@ -82,8 +82,7 @@ def test_install_secrets_file(context: testing.Context[SecEngCharmBase], tmpdir:
                         FileConfig(
                             name=str(tmpdir / 'directory!mode=700,uid' / 'test1-secret-file'),
                             permission='0o640',
-                            variables={'var1': 'foo'},
-                            template="Secret is {var1}",
+                            template="Secret is {foo}",
                         )
                     ],
                 )

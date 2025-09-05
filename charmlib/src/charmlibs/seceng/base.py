@@ -28,7 +28,6 @@ from . import utils
 class FileConfig:
     name: str
     permission: str | None = None
-    variables: dict[str, str]
     template: str
 
 
@@ -146,10 +145,6 @@ class SecEngCharmBase(ops.CharmBase):
             secret_content = secret_object.get_content(refresh=True)
 
             for file_entry in secret_entry.files:
-                variables = {}
-                for varname, varvalue in file_entry.variables.items():
-                    variables[varname] = secret_content[varvalue]
-
                 with utils.open_file_secure(
                     pathlib.Path(file_entry.name),
                     user=secret_entry.user,
@@ -157,5 +152,5 @@ class SecEngCharmBase(ops.CharmBase):
                     mode=int(file_entry.permission, 0) if file_entry.permission is not None else 0o600,
                     create_parents=True,
                 ) as f:
-                    f.write(file_entry.template.format(**variables))
+                    f.write(file_entry.template.format(**secret_content))
                 logging.info(f"Created secrets file '{file_entry.name}'.")
