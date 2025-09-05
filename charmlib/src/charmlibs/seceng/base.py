@@ -143,6 +143,7 @@ class SecEngCharmBase(ops.CharmBase):
                     user=secret_entry.user,
                     group=secret_entry.group,
                     mode=int(file_entry.permission, 0) if file_entry.permission is not None else 0o600,
+                    create_parents=True,
                 ) as f:
                     f.write(file_entry.template.format(**variables))
                 logging.info(f"Created secrets file '{file_entry.name}'.")

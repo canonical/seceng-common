@@ -15,6 +15,7 @@ import grp
 import os
 import pathlib
 import pwd
+import re
 import stat
 import typing
 from collections import deque
@@ -39,6 +40,59 @@ def suppress_wrapper[T, **P](
     return inner
 
 
+def _open_or_create_directory(
+    name: str,
+    *,
+    dir_fd: int | None,
+    create: bool = True,
+    uid: int | None = None,
+    gid: int | None = None,
+) -> int:
+    try:
+        directory_name, params_string = name.rsplit('!', 1)
+    except ValueError:
+        directory_name = name
+        params = {}
+    else:
+        params = {
+            key: (value if sep else None)
+            for key, sep, value in (s.partition('=') for s in re.split(r'\s*,\s*', params_string))
+            if key
+        }
+
+    while True:
+        try:
+            return os.open(directory_name, flags=os.O_PATH | os.O_NOFOLLOW, dir_fd=dir_fd)
+        except FileNotFoundError:
+            if not create:
+                raise
+            parents_mode = int(params.get('mode') or '0o700', 8)
+            try:
+                os.mkdir(directory_name, mode=parents_mode, dir_fd=dir_fd)
+            except FileExistsError:
+                continue
+
+            try:
+                new_dir_fd = os.open(directory_name, flags=os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            try:
+                # If the directory pointed to by dir_fd is a user-controlled
+                # path, they could only have replaced the new directory made
+                # above with another directory, because otherwise the above
+                # open() would have failed due to O_DIRECTORY | O_NOFOLLOW.
+                os.chown(
+                    new_dir_fd,
+                    uid=uid or -1 if 'uid' in params else -1,
+                    gid=gid or -1 if 'gid' in params else -1,
+                )
+            except:
+                os.close(new_dir_fd)
+                raise
+            else:
+                return new_dir_fd
+
+
 @contextlib.contextmanager
 def open_file_secure(
     path: pathlib.Path,
@@ -46,6 +100,7 @@ def open_file_secure(
     user: str | None = None,
     group: str | None = None,
     mode: int = 0o600,
+    create_parents: bool = False,
 ) -> collections.abc.Iterator[typing.TextIO]:
     """Securely open a file for writing.
 
@@ -81,6 +136,25 @@ def open_file_secure(
       - Hardlink protections are enabled (sysctl fs.protected_hardlinks, not
         enfoced).
       - A root-owned symlink will not be pointing to a user-controlled path.
+
+    Each directory component of the path can contain parameters after a '!'
+    character, which affect the creation of that directory:
+      - mode=X - the directory is created with the specified mode (as octal);
+        defaults to 700
+      - uid - the directory owner is changed to the user specified as an
+        argument to the function, after creation
+      - gid - the directory group is changed to the group specified as an
+        argument to the function, after creation
+
+    If a directory exists, its mode and owner/group are not changed.
+
+    For example, if the path is /var/lib/foo!mode=710,gid/bar!uid,gid/baz:
+      - /var and /var/lib and created as owned by root:root and with mode 700
+        (although they would normally exist).
+      - /var/lib/foo is created as owned by root:group with mode 710.
+      - /var/lib/foo/bar is created as owned by user:group with mode 700.
+      - The file baz is created under /var/lib/foo/bar according to the rest of
+        the function parameters.
     """
     path = path.absolute()
     uid = pwd.getpwnam(user).pw_uid if user is not None else None
@@ -92,11 +166,27 @@ def open_file_secure(
         seen_dirs: set[tuple[int, int]] = set()
         directory_components = deque(parent.name for parent in reversed(path.parents) if parent.name)
         directory_components.appendleft(path.anchor)
+        if any(parent.startswith('!') for parent in directory_components):
+            raise ValueError("no path component can begin with the '!' character")
         assert len(directory_components) > 0  # Needed by logic below.
+
         while directory_components:
             directory_name = directory_components.popleft()
             if directory_name:
-                dir_fd = os.open(directory_name, flags=os.O_PATH | os.O_NOFOLLOW, dir_fd=dir_fd)
+                # This is safe because this either opens a path with O_NOFOLLOW
+                # in the directory pointed at by dir_fd or it creates a new
+                # directory, but one of the following conditions must hold:
+                #   * enforce_user_owned = False (which means no
+                #     user-controlled path was previously traversed);
+                #   * or, the directory pointed to by dir_fd is owned by the
+                #     user.
+                dir_fd = _open_or_create_directory(
+                    directory_name,
+                    dir_fd=dir_fd,
+                    create=create_parents,
+                    uid=uid,
+                    gid=gid,
+                )
                 exit_stack.callback(os.close, dir_fd)
 
             # An empty component is only added by the symlink follow code
