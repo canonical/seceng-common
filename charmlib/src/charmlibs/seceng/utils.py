@@ -154,7 +154,7 @@ def open_file_secure(
         fileobj.flush()
 
         os.fsync(file_fd)
-        tmp_file_name = '.{path.name}.tmp}'
+        tmp_file_name = f'.{path.name}.tmp'
         os.link(f'/proc/self/fd/{file_fd}', tmp_file_name, dst_dir_fd=dir_fd)
         exit_stack.callback(suppress_wrapper(os.unlink, FileNotFoundError), tmp_file_name, dir_fd=dir_fd)
 
