@@ -13,14 +13,14 @@ import dataclasses
 import importlib.resources
 import logging
 import pathlib
-import shutil
 import subprocess
-from pathlib import Path
 
 import ops
 import pydantic
 import yaml
 from ops.model import ActiveStatus, MaintenanceStatus
+
+from . import utils
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -138,16 +138,12 @@ class SecEngCharmBase(ops.CharmBase):
                 for varname, varvalue in file_entry.variables.items():
                     variables[varname] = secret_content[varvalue]
 
-                file_path = Path(file_entry.name)
-                if not file_path.parent.exists():
-                    file_path.parent.mkdir(parents=True, exist_ok=True)
-                    if secret_entry.user and secret_entry.group:
-                        shutil.chown(file_path.parent, secret_entry.user, secret_entry.group)
-
-                with open(file_path, 'w') as f:
+                with utils.open_file_secure(
+                    pathlib.Path(file_entry.name),
+                    user=secret_entry.user,
+                    group=secret_entry.group,
+                    mode=int(file_entry.permission, 0) if file_entry.permission is not None else 0o600,
+                    create_parents=True,
+                ) as f:
                     f.write(file_entry.template.format(**variables))
-                if file_entry.permission:
-                    file_path.chmod(int(file_entry.permission, 0))
-                if secret_entry.user and secret_entry.group:
-                    shutil.chown(file_path, secret_entry.user, secret_entry.group)
-                logging.info(f"Created secrets file '{file_path}'.")
+                logging.info(f"Created secrets file '{file_entry.name}'.")

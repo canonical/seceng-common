@@ -9,6 +9,7 @@ import collections.abc
 import contextlib
 import os
 import pathlib
+import pwd
 import stat
 import tempfile
 
@@ -69,9 +70,10 @@ def test_install_secrets_file(context: testing.Context[SecEngCharmBase], tmpdir:
         secrets_config = SecretsRoot(
             {
                 'test1': SecretConfig(
+                    user=pwd.getpwuid(os.getuid()).pw_name,
                     files=[
                         FileConfig(
-                            name=str(tmpdir / 'test1-secret-file'),
+                            name=str(tmpdir / 'directory!mode=700,uid' / 'test1-secret-file'),
                             permission='0o640',
                             variables={'var1': 'foo'},
                             template="Secret is {var1}",
@@ -101,7 +103,7 @@ def test_install_secrets_file(context: testing.Context[SecEngCharmBase], tmpdir:
         state_out = context.run(context.on.config_changed(), state_in)
 
         # Assert:
-        test1_secret_file = exit_stack.enter_context(open(str(tmpdir / 'test1-secret-file'), 'r'))
+        test1_secret_file = exit_stack.enter_context(open(str(tmpdir / 'directory' / 'test1-secret-file'), 'r'))
         assert test1_secret_file.read() == f"Secret is {secret_test1_value_foo}"
         assert stat.S_IMODE(os.stat(test1_secret_file.fileno()).st_mode) == 0o640
         assert state_out.unit_status == testing.ActiveStatus('ready')

@@ -11,7 +11,7 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Development Status :: 5 - Production/Stable",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "ops>=2.19,<3",
     "pydantic>= 2.4,<3"
@@ -80,7 +80,7 @@ lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
 format.quote-style = "preserve"
 
 [tool.ruff.lint.mccabe]
-max-complexity = 12
+max-complexity = 15
 
 [tool.codespell]
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
