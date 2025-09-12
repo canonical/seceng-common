@@ -52,20 +52,6 @@ def test_config_invalid() -> None:
             'foo': {
                 'files': [
                     {
-                        'variables': {},
-                        'template': '',
-                    },
-                ]
-            }
-        })  # fmt: skip
-
-    # Missing file variables
-    with pytest.raises(pydantic.ValidationError):
-        SecretsRoot.model_validate({
-            'foo': {
-                'files': [
-                    {
-                        'name': '',
                         'template': '',
                     },
                 ]
@@ -79,7 +65,6 @@ def test_config_invalid() -> None:
                 'files': [
                     {
                         'name': '',
-                        'variables': {},
                     },
                 ]
             }
@@ -92,21 +77,6 @@ def test_config_invalid() -> None:
                 'files': [
                     {
                         'name': 0,
-                        'variables': {},
-                        'template': '',
-                    },
-                ]
-            }
-        })  # fmt: skip
-
-    # Wrong file variables type
-    with pytest.raises(pydantic.ValidationError):
-        SecretsRoot.model_validate({
-            'foo': {
-                'files': [
-                    {
-                        'name': '',
-                        'variables': '',
                         'template': '',
                     },
                 ]
@@ -120,7 +90,6 @@ def test_config_invalid() -> None:
                 'files': [
                     {
                         'name': '',
-                        'variables': {},
                         'template': 0,
                     },
                 ]
@@ -135,36 +104,88 @@ def test_config_invalid() -> None:
                     {
                         'name': '',
                         'permission': 0,
-                        'variables': {},
                         'template': '',
                     },
                 ]
             }
         })  # fmt: skip
 
-    # Wrong file variables elements key type
+    # Missing debconf name
     with pytest.raises(pydantic.ValidationError):
         SecretsRoot.model_validate({
             'foo': {
-                'files': [
+                'debconf': [
                     {
-                        'name': '',
-                        'variables': {0: ''},
+                        'package': '',
                         'template': '',
                     },
                 ]
             }
         })  # fmt: skip
 
-    # Wrong file variables elements value type
+    # Missing debconf package
     with pytest.raises(pydantic.ValidationError):
         SecretsRoot.model_validate({
             'foo': {
-                'files': [
+                'debconf': [
                     {
                         'name': '',
-                        'variables': {'': 0},
                         'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Missing debconf template
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong debconf name type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': 0,
+                        'package': '',
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong debconf package type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': 0,
+                        'template': '',
+                    },
+                ]
+            }
+        })  # fmt: skip
+
+    # Wrong file templates type
+    with pytest.raises(pydantic.ValidationError):
+        SecretsRoot.model_validate({
+            'foo': {
+                'debconf': [
+                    {
+                        'name': '',
+                        'package': '',
+                        'template': 0,
                     },
                 ]
             }

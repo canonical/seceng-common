@@ -14,6 +14,8 @@ import importlib.resources
 import logging
 import pathlib
 import subprocess
+import sys
+import typing
 
 import ops
 import pydantic
@@ -35,11 +37,16 @@ class Snap:
     channel: str = 'stable'
 
 
+class DebconfConfig:
+    name: str
+    package: str
+    template: str
+
+
 @dataclasses.dataclass(kw_only=True)
 class FileConfig:
     name: str
     permission: str | None = None
-    variables: dict[str, str]
     template: str
 
 
@@ -48,7 +55,8 @@ class SecretConfig(pydantic.BaseModel):
 
     user: str | None = None
     group: str | None = None
-    files: list[FileConfig]
+    debconf: list[DebconfConfig] = []
+    files: list[FileConfig] = []
 
 
 class SecretsRoot(pydantic.RootModel[dict[str, SecretConfig]]):
@@ -81,58 +89,67 @@ class SecEngCharmBase(ops.CharmBase):
 
     secrets_config: str | None = None
 
+    _stored = ops.StoredState()  # type: ignore[no-untyped-call]
+
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
-        framework.observe(self.on.install, self._seceng_base_on_install)
-        framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrade)
         framework.observe(self.on.config_changed, self._seceng_base_on_config_changed)
+        framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
 
-    def _seceng_base_on_install(self, event: ops.InstallEvent) -> None:
-        self._install_ppa_and_packages()
-        self._install_snaps()
-        self.unit.status = ActiveStatus('ready')
-
-    def _seceng_base_on_upgrade(self, event: ops.UpgradeCharmEvent) -> None:
-        self._install_ppa_and_packages()
-        self._install_snaps()
-        self.unit.status = ActiveStatus('ready')
+        self._stored.set_default(configured_ppa='', installed_packages=set())
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        self._install_ppa_and_packages()
+        self._install_snaps()
         self._install_secrets()
         self.unit.status = ActiveStatus('ready')
 
+    def _seceng_base_on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        if event.secret.id is not None:
+            self._install_secrets(filter_secrets={event.secret.id})
+
     def _install_ppa_and_packages(self) -> None:
         for package in self.package_install_list:
-            self.unit.status = MaintenanceStatus(f'Installing Debian Package: {package.name}')
-            subprocess.check_call(["apt-get", "update"])
-            subprocess.check_call(["add-apt-repository", f'ppa:{package.ppa}/{self.config["deployment"]}'])
-            subprocess.check_call(["apt-get", "update"])
-            subprocess.check_call(["apt-get", "install", "-y", package.name])
+            new_ppa = f'ppa:{package.ppa}/{self.config["deployment"]}'
+            if new_ppa != typing.cast(str, self._stored.configured_ppa):
+                self.unit.status = MaintenanceStatus('Configuring PPA')
+                self._stored.configured_ppa = new_ppa
+                subprocess.check_call(["add-apt-repository", new_ppa])
+                subprocess.check_call(["apt-get", "update"])
+                self._stored.installed_packages = set()  # Force reinstallation of packages when PPA changes.
+
+            if set(self.package_install_list) != typing.cast(set[str], self._stored.installed_packages):
+                self._stored.installed_packages = set(self.package_install_list)
+                self.unit.status = MaintenanceStatus(f'Installing Debian Package: {package.name}')
+                subprocess.check_call(["apt-get", "install", "-y", package.name])
 
     def _install_snaps(self) -> None:
         for snap in self.snap_install_list:
             self.unit.status = MaintenanceStatus('Installing Snap: {snap.name} {snap.channel}')
             subprocess.check_call(["snap", "install", "--channel", snap.channel, snap.name])
 
-    def _install_secrets(self) -> None:
+    def _install_secrets(self, *, filter_secrets: set[str] = set()) -> None:
         # This method should not be called on the install or upgrade hook,
         # because it may rely on package installation from
         self.unit.status = MaintenanceStatus('Installing Secrets')
         logging.warning("About to install secrets...")
 
         with importlib.resources.as_file(importlib.resources.files() / 'secrets.yaml') as filepath:
-            self._install_secrets_file(filepath)
+            self._install_secrets_file(filepath, filter_secrets=filter_secrets)
 
         if self.secrets_config is not None:
-            self._install_secrets_file(self.charm_dir / self.secrets_config)
+            self._install_secrets_file(self.charm_dir / self.secrets_config, filter_secrets=filter_secrets)
 
-    def _install_secrets_file(self, filepath: pathlib.Path) -> None:
+    def _install_secrets_file(self, filepath: pathlib.Path, *, filter_secrets: set[str] = set()) -> None:
+        logging.debug("Parsing secrets file '{}'...".format(filepath))
         with open(filepath, 'r') as file:
             try:
                 all_secrets = SecretsRoot.model_validate(yaml.safe_load(file))  # type: ignore[no-untyped-call]
             except pydantic.ValidationError:
                 logging.error(f"Failed to load secrets configuration file '{filepath}.'")
                 raise
+
+        debconf_selections: list[str] = []
 
         for name, secret_id in self.config.items():
             option_type = self.meta.config.get(name)
@@ -146,6 +163,8 @@ class SecEngCharmBase(ops.CharmBase):
                     f" of type 'secret': {type(secret_id).__name__}."
                 )
                 continue
+            if filter_secrets and secret_id not in filter_secrets:
+                continue
 
             logging.warning(f"Processing secret '{name}'...")
             secret_entry = all_secrets[name]
@@ -153,11 +172,21 @@ class SecEngCharmBase(ops.CharmBase):
             secret_object = self.model.get_secret(id=secret_id)
             secret_content = secret_object.get_content(refresh=True)
 
-            for file_entry in secret_entry.files:
-                variables = {}
-                for varname, varvalue in file_entry.variables.items():
-                    variables[varname] = secret_content[varvalue]
+            for debconf_entry in secret_entry.debconf:
+                value = debconf_entry.template.format(**secret_content)
+                try:
+                    value = subprocess.check_output(
+                        ['debconf-escape', '-e'],
+                        input=value,
+                        text=True,
+                        encoding=sys.stdin.encoding,
+                    )
+                except subprocess.CalledProcessError as e:
+                    raise ValueError(f"failed to escape debconf value '{value}': exit code {e.returncode}")
+                debconf_selections.append(f'{debconf_entry.package} {debconf_entry.name} password {value}')
+                logging.info(f"Queueing debconf option '{debconf_entry.name}' for package '{debconf_entry.package}'.")
 
+            for file_entry in secret_entry.files:
                 with utils.open_file_secure(
                     pathlib.Path(file_entry.name),
                     user=secret_entry.user,
@@ -165,5 +194,21 @@ class SecEngCharmBase(ops.CharmBase):
                     mode=int(file_entry.permission, 0) if file_entry.permission is not None else 0o600,
                     create_parents=True,
                 ) as f:
-                    f.write(file_entry.template.format(**variables))
+                    f.write(file_entry.template.format(**secret_content))
                 logging.info(f"Created secrets file '{file_entry.name}'.")
+
+        if debconf_selections:
+            try:
+                subprocess.run(
+                    ['debconf-set-selections'],
+                    input='\n'.join(debconf_selections),
+                    text=True,
+                    encoding=sys.stdin.encoding,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise ValueError(f"failed to run debconf-set-selections: exit code {e.returncode}")
+            else:
+                logging.info(f"Successfully set {len(debconf_selections)} debconf options.")
+        else:
+            logging.debug("No debconf options configured.")
