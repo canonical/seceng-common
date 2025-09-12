@@ -24,6 +24,18 @@ from . import utils
 
 
 @dataclasses.dataclass(kw_only=True)
+class Package:
+    name: str
+    ppa: str = 'ubuntu-security-infra'
+
+
+@dataclasses.dataclass(kw_only=True)
+class Snap:
+    name: str
+    channel: str = 'stable'
+
+
+@dataclasses.dataclass(kw_only=True)
 class FileConfig:
     name: str
     permission: str | None = None
@@ -64,7 +76,8 @@ class SecEngCharmBase(ops.CharmBase):
     """
 
     package_install_ppa = 'ubuntu-security-infra'
-    package_install_list: list[str] = []
+    package_install_list: list[Package] = []
+    snap_install_list: list[Snap] = []
 
     secrets_config: str | None = None
 
@@ -76,10 +89,12 @@ class SecEngCharmBase(ops.CharmBase):
 
     def _seceng_base_on_install(self, event: ops.InstallEvent) -> None:
         self._install_ppa_and_packages()
+        self._install_snaps()
         self.unit.status = ActiveStatus('ready')
 
     def _seceng_base_on_upgrade(self, event: ops.UpgradeCharmEvent) -> None:
         self._install_ppa_and_packages()
+        self._install_snaps()
         self.unit.status = ActiveStatus('ready')
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
@@ -87,12 +102,17 @@ class SecEngCharmBase(ops.CharmBase):
         self.unit.status = ActiveStatus('ready')
 
     def _install_ppa_and_packages(self) -> None:
-        self.unit.status = MaintenanceStatus('Installing Debian Package')
-        subprocess.check_call(["apt-get", "update"])
-        subprocess.check_call(["add-apt-repository", f'ppa:{self.package_install_ppa}/{self.config["deployment"]}'])
-        subprocess.check_call(["apt-get", "update"])
-        if self.package_install_list:
-            subprocess.check_call(["apt-get", "install", "-y"] + self.package_install_list)
+        for package in self.package_install_list:
+            self.unit.status = MaintenanceStatus(f'Installing Debian Package: {package.name}')
+            subprocess.check_call(["apt-get", "update"])
+            subprocess.check_call(["add-apt-repository", f'ppa:{package.ppa}/{self.config["deployment"]}'])
+            subprocess.check_call(["apt-get", "update"])
+            subprocess.check_call(["apt-get", "install", "-y", package.name])
+
+    def _install_snaps(self) -> None:
+        for snap in self.snap_install_list:
+            self.unit.status = MaintenanceStatus('Installing Snap: {snap.name} {snap.channel}')
+            subprocess.check_call(["snap", "install", "--channel", snap.channel, snap.name])
 
     def _install_secrets(self) -> None:
         # This method should not be called on the install or upgrade hook,
