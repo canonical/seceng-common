@@ -25,13 +25,13 @@ from ops.model import ActiveStatus, MaintenanceStatus
 from . import utils
 
 
-@dataclasses.dataclass(kw_only=True)
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class Package:
     name: str
     ppa: str = 'ubuntu-security-infra'
 
 
-@dataclasses.dataclass(kw_only=True)
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class Snap:
     name: str
     channel: str = 'stable'
