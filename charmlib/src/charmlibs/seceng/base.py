@@ -37,6 +37,7 @@ class Snap:
     channel: str = 'stable'
 
 
+@dataclasses.dataclass(kw_only=True)
 class DebconfConfig:
     name: str
     package: str
