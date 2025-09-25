@@ -131,19 +131,10 @@ class SecEngCharmBase(ops.CharmBase):
             # Do not do anything, because it could interfere with other charms.
             pass
         for new_package in new_packages - previous_packages:
-            try:
-                subprocess.run(
-                    ['dpkg', '--set-selections'],
-                    input=f'{new_package} install\n',
-                    text=True,
-                    encoding=sys.stdin.encoding,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                raise ValueError(f"failed to run dpkg --set-selections: exit code {e.returncode}")
+            subprocess.check_call(['apt-mark', 'install', new_package])
         if new_packages != previous_packages:
             self.unit.status = MaintenanceStatus('Installing Debian packages')
-            subprocess.check_call(['apt-get', 'install', '-y'])
+            subprocess.check_call(['apt-get', 'dselect-upgrade', '-y'])
             self._stored.installed_packages = list(new_packages)
 
     def _install_snaps(self) -> None:
