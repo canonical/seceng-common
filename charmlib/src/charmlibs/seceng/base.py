@@ -97,7 +97,7 @@ class SecEngCharmBase(ops.CharmBase):
         framework.observe(self.on.config_changed, self._seceng_base_on_config_changed)
         framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
 
-        self._stored.set_default(configured_ppa='', installed_packages=set())
+        self._stored.set_default(configured_ppas=[], installed_packages=[])
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         self._install_ppa_and_packages()
@@ -110,19 +110,41 @@ class SecEngCharmBase(ops.CharmBase):
             self._install_secrets(filter_secrets={event.secret.id})
 
     def _install_ppa_and_packages(self) -> None:
-        for package in self.package_install_list:
-            new_ppa = f'ppa:{package.ppa}/{self.config["deployment"]}'
-            if new_ppa != typing.cast(str, self._stored.configured_ppa):
-                self.unit.status = MaintenanceStatus('Configuring PPA')
-                self._stored.configured_ppa = new_ppa
-                subprocess.check_call(["add-apt-repository", new_ppa])
-                subprocess.check_call(["apt-get", "update"])
-                self._stored.installed_packages = set()  # Force reinstallation of packages when PPA changes.
+        previous_ppas = set(typing.cast(list[str], self._stored.configured_ppas))
+        new_ppas = {f'ppa:{package.ppa}/{self.config["deployment"]}' for package in self.package_install_list}
+        for old_ppa in previous_ppas - new_ppas:
+            # FIXME: find a solution.
+            # Do not do anything, because it could interfere with other charms.
+            pass
+        for new_ppa in new_ppas - previous_ppas:
+            self.unit.status = MaintenanceStatus('Configuring PPA')
+            subprocess.check_call(['add-apt-repository', '--no-update', '--ppa', new_ppa])
+        if new_ppas != previous_ppas:
+            subprocess.check_call(['apt-get', 'update'])
+            self._stored.configured_ppa = list(new_ppas)
+            self._stored.installed_packages = []  # Force reinstallation of packages when PPA changes.
 
-            if set(self.package_install_list) != typing.cast(set[str], self._stored.installed_packages):
-                self._stored.installed_packages = set(self.package_install_list)
-                self.unit.status = MaintenanceStatus(f'Installing Debian Package: {package.name}')
-                subprocess.check_call(["apt-get", "install", "-y", package.name])
+        previous_packages = set(typing.cast(list[str], self._stored.installed_packages))
+        new_packages = {package.name for package in self.package_install_list}
+        for old_package in previous_packages - new_packages:
+            # FIXME: might not be a real issue.
+            # Do not do anything, because it could interfere with other charms.
+            pass
+        for new_package in new_packages - previous_packages:
+            try:
+                subprocess.run(
+                    ['dpkg', '--set-selections'],
+                    input=f'{new_package} install\n',
+                    text=True,
+                    encoding=sys.stdin.encoding,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise ValueError(f"failed to run dpkg --set-selections: exit code {e.returncode}")
+        if new_packages != previous_packages:
+            self.unit.status = MaintenanceStatus('Installing Debian packages')
+            subprocess.check_call(['apt-get', 'install', '-y'])
+            self._stored.installed_packages = list(new_packages)
 
     def _install_snaps(self) -> None:
         for snap in self.snap_install_list:
