@@ -12,6 +12,7 @@ import collections.abc
 import dataclasses
 import importlib.resources
 import logging
+import os
 import pathlib
 import subprocess
 import sys
@@ -163,6 +164,7 @@ class SecEngCharmBase(ops.CharmBase):
                 logging.error(f"Failed to load secrets configuration file '{filepath}.'")
                 raise
 
+        debconf_packages: set[str] = set()
         debconf_selections: list[str] = []
 
         for name, secret_id in self.config.items():
@@ -197,6 +199,7 @@ class SecEngCharmBase(ops.CharmBase):
                     )
                 except subprocess.CalledProcessError as e:
                     raise ValueError(f"failed to escape debconf value '{value}': exit code {e.returncode}")
+                debconf_packages.add(debconf_entry.package)
                 debconf_selections.append(f'{debconf_entry.package} {debconf_entry.name} password {value}')
                 logging.info(f"Queueing debconf option '{debconf_entry.name}' for package '{debconf_entry.package}'.")
 
@@ -226,3 +229,12 @@ class SecEngCharmBase(ops.CharmBase):
                 logging.info(f"Successfully set {len(debconf_selections)} debconf options.")
         else:
             logging.debug("No debconf options configured.")
+
+        # FIXME: euid check is for tests. Tests should however provide mock commands, instead.
+        if debconf_packages and os.geteuid() == 0:
+            try:
+                subprocess.check_call(['dpkg-reconfigure', '-fnoninteractive'] + list(debconf_packages))
+            except subprocess.CalledProcessError as e:
+                raise ValueError(f"failed to run dpkg-reconfigure: exit code {e.returncode}")
+            else:
+                logging.info("Successfully ran dpkg-reconfigure.")
