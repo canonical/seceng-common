@@ -93,6 +93,7 @@ def _open_or_create_directory(
                 return new_dir_fd
 
 
+@typing.overload
 @contextlib.contextmanager
 def open_file_secure(
     path: pathlib.Path,
@@ -101,7 +102,33 @@ def open_file_secure(
     group: str | None = None,
     mode: int = 0o600,
     create_parents: bool = False,
-) -> collections.abc.Iterator[typing.TextIO]:
+    text: typing.Literal[True] = True,
+) -> collections.abc.Iterator[typing.TextIO]: ...
+
+
+@typing.overload
+@contextlib.contextmanager
+def open_file_secure(
+    path: pathlib.Path,
+    *,
+    user: str | None = None,
+    group: str | None = None,
+    mode: int = 0o600,
+    create_parents: bool = False,
+    text: typing.Literal[False],
+) -> collections.abc.Iterator[typing.BinaryIO]: ...
+
+
+@contextlib.contextmanager
+def open_file_secure(
+    path: pathlib.Path,
+    *,
+    user: str | None = None,
+    group: str | None = None,
+    mode: int = 0o600,
+    create_parents: bool = False,
+    text: bool = True,
+) -> collections.abc.Iterator[typing.BinaryIO | typing.TextIO]:
     """Securely open a file for writing.
 
     This code may run as root and needs to safely create files in locations
@@ -239,7 +266,13 @@ def open_file_secure(
 
         os.chown(file_fd, uid if uid is not None else -1, gid if gid is not None else -1)
 
-        fileobj = open(file_fd, 'w')
+        fileobj: typing.BinaryIO | typing.TextIO
+        if text:
+            fileobj = open(file_fd, 'w')
+        else:
+            fileobj = open(file_fd, 'wb')
+        # mypy does not handle the much simpler:
+        # fileobj = open(file_fd, 'w' if text else 'wb')
         yield fileobj
         fileobj.flush()
 
@@ -252,3 +285,30 @@ def open_file_secure(
         # anything like AT_REPLACE ever becomes available.
         # https://lore.kernel.org/linux-fsdevel/cover.1524549513.git.osandov@fb.com/
         os.rename(tmp_file_name, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+
+
+def copy_file_secure(
+    src: pathlib.Path,
+    dst: pathlib.Path,
+    /,
+    *,
+    user: str | None = None,
+    group: str | None = None,
+    mode: int = 0o600,
+    create_parents: bool = False,
+) -> None:
+    """Securely copy a file to a destination.
+
+    This function opens the first argument file path for reading and makes use
+    of the open_file_secure() function to atomically writes to the file
+    referenced by the second argument path.
+    """
+    with (
+        open(src, 'rb') as src_file,
+        open_file_secure(dst, user=user, group=group, mode=mode, create_parents=create_parents, text=False) as dst_file,
+    ):
+        while True:
+            data = src_file.read(1024 * 1024)
+            if not data:
+                break
+            dst_file.write(data)
