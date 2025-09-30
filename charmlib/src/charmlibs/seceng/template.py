@@ -198,8 +198,7 @@ class Namespace:
             raise KeyError(e.name) from None
 
 
-@dataclasses.dataclass(kw_only=True)
-class AccessInfo:
+class AccessInfo(pydantic.BaseModel):
     namespace: str
     attribute: str
 
