@@ -400,7 +400,7 @@ class TemplateEngine:
         # This line won't work if the template contains """ outside of {}
         # expressions; inside they would work. The only alternative is to split
         # by {, taking escaping into account, and concatenate multiple
-        # contructed f-strings, which are then evaluated.
+        # constructed f-strings, which are then evaluated.
         template = f'f"""{template}"""'
 
         # This is evaluating an f-string taken from a configuration file. This
