@@ -166,13 +166,21 @@ class Namespace:
             raise AttributeError(name)
         self._dirty.add(name)
 
-    def __getattr__(self, name: str) -> JSONType:
-        if name and name[0] != '_':
-            self._accessed.add(name)
+    def __getattribute__(self, name: str) -> typing.Any:
+        if name.startswith('__'):
+            return super().__getattribute__(name)
+
+        # This is slightly different than the usual attribute lookup, because
+        # data descriptors normally take precedence over the instance's
+        # dictionary.
         try:
-            return typing.cast(JSONType, self.__dict__[name])
+            value = self.__dict__[name]
         except KeyError:
-            raise AttributeError(name) from None
+            return super().__getattribute__(name)
+        else:
+            if name and name[0] != '_':
+                self._accessed.add(name)
+            return value
 
     def __setattr__(self, name: str, value: JSONType) -> None:
         self.__dict__[name] = value
