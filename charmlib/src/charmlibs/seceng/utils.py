@@ -233,7 +233,8 @@ def open_file_secure(
                         " traversed a directory owned by different UID"
                     )
                 if (
-                    stat.S_IMODE(dir_stat.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
+                    not stat.S_ISLNK(dir_stat.st_mode)
+                    and stat.S_IMODE(dir_stat.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
                     and dir_stat.st_mode & stat.S_ISVTX == 0
                 ):
                     raise PermissionError("cannot traverse directory owned by UID 0 that is writable by other users")
