@@ -16,6 +16,7 @@ __all__ = ['Namespace', 'TemplateEngine', 'TemplateError']
 import abc
 import collections.abc
 import dataclasses
+import hashlib
 import logging
 import os
 import pathlib
@@ -203,9 +204,14 @@ class AccessInfo(pydantic.BaseModel):
     attribute: str
 
 
+class TemplateInfo(pydantic.BaseModel):
+    hash: str | None = None
+    accessed: list[AccessInfo] = []
+
+
 class State(pydantic.BaseModel):
     context: dict[str, dict[str, JSONType]] = {}
-    accessed: dict[str, list[AccessInfo]] = {}
+    info: dict[str, TemplateInfo] = {}
 
 
 class TemplateEngine:
@@ -275,7 +281,10 @@ class TemplateEngine:
             update_actions(entry_actions)
 
     def _process_debconf_entry(self, entry: DebconfConfig) -> collections.abc.Iterable[Action]:
-        if not self._check_dirty_context(f'debconf:{entry.name}'):
+        previous_hash = self._check_dirty(f'debconf:{entry.name}')
+
+        template_hash = hashlib.sha256(entry.template.encode('utf-8')).hexdigest()
+        if template_hash == previous_hash:
             return []
 
         try:
@@ -312,27 +321,34 @@ class TemplateEngine:
         else:
             logging.info(f"Configured debconf option '{entry.name}' for package '{entry.package}'.")
 
-        self.state.accessed[f'debconf:{entry.name}'] = list(accesses)
+        self.state.info[f'debconf:{entry.name}'] = TemplateInfo(
+            hash=template_hash,
+            accessed=list(accesses),
+        )
 
         return entry.actions + [DpkgReconfigureAction(entry.package)]
 
     def _process_file_entry(self, entry: FileConfig) -> collections.abc.Iterable[Action]:
-        if not self._check_dirty_context(f'file:{entry.name}'):
-            return []
+        previous_hash = self._check_dirty(f'file:{entry.name}')
 
         accesses: collections.abc.Iterable[AccessInfo]
 
         if entry.file is not None:
-            utils.copy_file_secure(
+            template_hash = utils.copy_file_secure(
                 self.base_dir / pathlib.Path(entry.file),
                 pathlib.Path(entry.name),
                 user=entry.user,
                 group=entry.group,
                 mode=int(entry.permission, 8) if entry.permission is not None else 0o600,
                 create_parents=True,
+                check_hash=previous_hash,
             )
             accesses = []
         elif entry.template is not None:
+            template_hash = hashlib.sha256(entry.template.encode('utf-8')).hexdigest()
+            if template_hash == previous_hash:
+                return []
+
             try:
                 content, accesses = self._evaluate_template(entry.template)
             except TemplateError as e:
@@ -356,20 +372,31 @@ class TemplateEngine:
 
         logging.info(f"Created templated file '{entry.name}'.")
 
-        self.state.accessed[f'file:{entry.name}'] = list(accesses)
+        self.state.info[f'file:{entry.name}'] = TemplateInfo(
+            hash=template_hash,
+            accessed=list(accesses),
+        )
 
         return entry.actions
 
-    def _check_dirty_context(self, entry_name: str) -> bool:
+    def _check_dirty(self, entry_name: str) -> str | None:
+        """Check if a template entry needs to be re-processed.
+
+        Returns a hash of the previous template processed. If the current
+        template's hash matches, the template does not need processing.
+
+        A return value of None means that the template certainly needs
+        processing.
+        """
         try:
-            access_list = self.state.accessed[entry_name]
+            info = self.state.info[entry_name]
         except KeyError:
             # If the entry does not have an access history in the state, assume
             # it needs to be processed. This would happen if this is the first
             # time the entry is processed.
-            return True
+            return None
 
-        for access_info in access_list:
+        for access_info in info.accessed:
             try:
                 namespace = self.context[access_info.namespace]
             except KeyError:
@@ -380,11 +407,12 @@ class TemplateEngine:
                 # different keys. Consider this a bug in the application.
                 raise RuntimeError(f"BUG: context does not have previously used key '{access_info.namespace}'")
             if namespace.is_dirty(access_info.attribute):
-                return True
+                return None
 
         # No attribute of any context namespace that was previously accessed
-        # was dirty.
-        return False
+        # was dirty. Only process the template again if the template itself
+        # changed.
+        return info.hash
 
     def _evaluate_template(self, template: str) -> tuple[str, collections.abc.Iterable[AccessInfo]]:
         # First, clear the access for all the namespaces.

@@ -12,6 +12,7 @@ import collections.abc
 import contextlib
 import functools
 import grp
+import hashlib
 import os
 import pathlib
 import pwd
@@ -288,6 +289,10 @@ def open_file_secure(
         os.rename(tmp_file_name, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
 
 
+class SameDigest(Exception):  # noqa: N818
+    """This is only used in control flow."""
+
+
 def copy_file_secure(
     src: pathlib.Path,
     dst: pathlib.Path,
@@ -297,19 +302,41 @@ def copy_file_secure(
     group: str | None = None,
     mode: int = 0o600,
     create_parents: bool = False,
-) -> None:
+    check_hash: str | None = None,
+) -> str:
     """Securely copy a file to a destination.
 
     This function opens the first argument file path for reading and makes use
     of the open_file_secure() function to atomically writes to the file
     referenced by the second argument path.
+
+    Optionally, it can verify if the file that is being copied has a given
+    hash value, as previously returned by this function.
+
+    The function always returns a string representing a hash.
     """
-    with (
-        open(src, 'rb') as src_file,
-        open_file_secure(dst, user=user, group=group, mode=mode, create_parents=create_parents, text=False) as dst_file,
-    ):
-        while True:
-            data = src_file.read(1024 * 1024)
-            if not data:
-                break
-            dst_file.write(data)
+    hash = hashlib.sha256()
+    try:
+        with (
+            open(src, 'rb') as src_file,
+            open_file_secure(
+                dst,
+                user=user,
+                group=group,
+                mode=mode,
+                create_parents=create_parents,
+                text=False,
+            ) as dst_file,
+        ):
+            while True:
+                data = src_file.read(1024 * 1024)
+                if not data:
+                    break
+                hash.update(data)
+                dst_file.write(data)
+            digest = hash.hexdigest()
+            if digest == check_hash:
+                raise SameDigest
+    except SameDigest:
+        pass
+    return digest
