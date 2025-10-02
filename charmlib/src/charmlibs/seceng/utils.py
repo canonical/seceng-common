@@ -190,6 +190,7 @@ def open_file_secure(
 
     with contextlib.ExitStack() as exit_stack:
         dir_fd = None
+        prev_dir_fd = None
         enforce_user_owned = False
         seen_dirs: set[tuple[int, int]] = set()
         directory_components = deque(parent.name for parent in reversed(path.parents) if parent.name)
@@ -208,6 +209,7 @@ def open_file_secure(
                 #     user-controlled path was previously traversed);
                 #   * or, the directory pointed to by dir_fd is owned by the
                 #     user.
+                prev_dir_fd = dir_fd
                 dir_fd = _open_or_create_directory(
                     directory_name,
                     dir_fd=dir_fd,
@@ -254,7 +256,7 @@ def open_file_secure(
                 #    by the user and all future directory components are owned
                 #    by the user.
                 link_target = os.readlink('', dir_fd=dir_fd)
-                dir_fd = os.open(link_target, flags=os.O_PATH, dir_fd=dir_fd)
+                dir_fd = os.open(link_target, flags=os.O_PATH, dir_fd=prev_dir_fd)
                 exit_stack.callback(os.close, dir_fd)
                 directory_components.appendleft('')
             elif not stat.S_ISDIR(dir_stat.st_mode):
