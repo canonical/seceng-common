@@ -1,0 +1,69 @@
+files:
+  # customer-ppa-tracker credentials
+  - silentfail: true
+    name: '/etc/customer-ppa-tracker!mode=755/passphrase'
+    user: 'uct-sync'
+    group: 'uct-sync'
+    permission: '0o400'
+    template: |
+      {secret['customer-ppa-tracker']['passphrase']}
+  - silentfail: true
+    name: '/etc/customer-ppa-tracker!mode=755/id_rsa'
+    user: 'uct-sync'
+    group: 'uct-sync'
+    permission: '0o400'
+    template: |
+      {secret['customer-ppa-tracker']['private']}
+  - silentfail: true
+    name: '/etc/customer-ppa-tracker!mode=755/id_rsa.pub'
+    user: 'uct-sync'
+    group: 'uct-sync'
+    permission: '0o644'
+    template: |
+      {secret['customer-ppa-tracker']['public']}
+
+  # sct-sync credentials
+  - silentfail: true
+    name: '/etc/sct-sync!mode=755/passphrase'
+    user: 'sct-sync'
+    group: 'sct-sync'
+    permission: '0o400'
+    template: |
+      {secret['sct-sync']['passphrase']}
+  - silentfail: true
+    name: '/etc/sct-sync!mode=755/id_rsa'
+    user: 'sct-sync'
+    group: 'sct-sync'
+    permission: '0o400'
+    template: |
+      {secret['sct-sync']['private']}
+  - silentfail: true
+    name: '/etc/sct-sync!mode=755/id_rsa.pub'
+    user: 'sct-sync'
+    group: 'sct-sync'
+    permission: '0o644'
+    template: |
+      {secret['sct-sync']['public']}
+
+  # notices-sync credentials
+  - silentfail: true
+    name: '/etc/notices-sync!mode=755/passphrase'
+    user: 'notices-sync'
+    group: 'notices-sync'
+    permission: '0o400'
+    template: |
+      {secret['notices-sync']['passphrase']}
+  - silentfail: true
+    name: '/etc/notices-sync!mode=755/id_rsa'
+    user: 'notices-sync'
+    group: 'notices-sync'
+    permission: '0o400'
+    template: |
+      {secret['notices-sync']['private']}
+  - silentfail: true
+    name: '/etc/notices-sync!mode=755/id_rsa.pub'
+    user: 'notices-sync'
+    group: 'notices-sync'
+    permission: '0o644'
+    template: |
+      {secret['notices-sync']['public']}
