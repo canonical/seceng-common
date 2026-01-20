@@ -1,0 +1,7 @@
+*.debhelper
+*.substvars
+*.charm
+debian/.debhelper
+debian/debhelper-build-stamp
+debian/files
+**/__pycache__
