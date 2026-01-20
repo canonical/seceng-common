@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+
+# Copyright (C) 2026 Canonical, Ltd.
+# Author: Paulo Flabiano Smorigo <pfsmorigo@canonical.com>
+
+# This script is distributed under the terms and conditions of the GNU General
+# Public License, Version 3 or later. See http://www.gnu.org/copyleft/gpl.html
+# for details.
+
+import configparser
+import os
+import argparse
+import logging
+import glob
+import datetime
+import fnmatch
+import mimetypes
+from swiftclient import client
+from swiftclient.exceptions import ClientException
+
+
+def setup_logging(verbosity):
+    """Sets log level based on verbosity flags."""
+    if verbosity >= 1:
+        level = logging.DEBUG
+        fmt = "%(asctime)s - %(levelname)s - %(message)s"
+    elif verbosity == -1:
+        level = logging.WARNING
+        fmt = "%(levelname)s: %(message)s"
+    else:
+        level = logging.INFO
+        fmt = "%(asctime)s - %(message)s"
+    logging.basicConfig(level=level, format=fmt, datefmt="%H:%M:%S")
+
+
+def get_swift_connection(config_file):
+    """Parses config and returns a Swift Connection."""
+    expanded_path = os.path.expanduser(config_file)
+    config = configparser.ConfigParser()
+    if not os.path.exists(expanded_path):
+        raise FileNotFoundError(f"Config file '{expanded_path}' not found.")
+    config.read(expanded_path)
+    try:
+        os_conf = config["openstack"]
+        os_options = {
+            "project_name": os_conf["project_name"],
+            "user_domain_name": os_conf["user_domain_name"],
+            "project_domain_name": os_conf["project_domain_name"],
+            "region_name": os_conf.get("region_name", "RegionOne"),
+        }
+        return client.Connection(
+            authurl=os_conf["auth_url"],
+            user=os_conf["username"],
+            key=os_conf["password"],
+            os_options=os_options,
+            auth_version="3",
+        )
+    except KeyError as e:
+        raise ValueError(f"Missing config key: {e}")
+
+
+def sizeof_fmt(num, suffix="B"):
+    """Converts bytes to human readable string."""
+    for unit in ["", "K", "M", "G", "T", "P", "E", "Z"]:
+        if abs(num) < 1024.0:
+            return f"{num:3.1f} {unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f} Y{suffix}"
+
+
+def _get_safe_prefix(pattern):
+    """Extracts the static part of a path before any wildcard characters."""
+    if not any(c in pattern for c in ["*", "?", "["]):
+        return pattern
+    parts = pattern.split("/")
+    safe_parts = []
+
+    for p in parts:
+        if any(c in p for c in ["*", "?", "["]):
+            break
+        safe_parts.append(p)
+
+    if not safe_parts:
+        return None
+
+    return "/".join(safe_parts) + "/"
+
+
+def _upload_file(conn, container, file_path, base_path, dry_run, destination=None):
+    if base_path:
+        rel_path = os.path.relpath(file_path, base_path)
+        name_part = rel_path.replace(os.sep, "/")
+    else:
+        name_part = os.path.basename(file_path)
+
+    if destination:
+        if destination.endswith("/"):
+            object_name = destination + name_part
+        else:
+            object_name = destination
+    else:
+        object_name = name_part
+
+    # Remove one leading slash if present
+    if object_name.startswith("/"):
+        object_name = object_name[1:]
+
+    # Get Local Stats
+    local_mtime = os.path.getmtime(file_path)
+    local_size = os.path.getsize(file_path)
+
+    # Detect MIME Type (We keep this so listing shows correct type)
+    content_type, encoding = mimetypes.guess_type(file_path)
+    if content_type is None:
+        content_type = "application/octet-stream"
+
+    try:
+        # Get Remote Stats
+        headers = conn.head_object(container, object_name)
+        remote_mtime = headers.get("x-object-meta-mtime")
+        remote_size = headers.get("content-length")
+
+        is_time_match = remote_mtime and float(remote_mtime) == local_mtime
+        is_size_match = remote_size and int(remote_size) == local_size
+
+        if is_time_match and is_size_match:
+            logging.debug(f"Skipping '{object_name}' (Up to date)")
+            return
+
+        if not remote_mtime:
+            reason = "New file"
+        elif not is_size_match:
+            reason = f"Size mismatch (L:{local_size} vs R:{remote_size})"
+        elif not is_time_match:
+            reason = "Timestamp mismatch"
+        else:
+            reason = "Update required"
+
+    except ClientException:
+        reason = "New file"
+
+    if dry_run:
+        logging.info(
+            f"[DRY RUN] Would upload '{file_path}' -> '{container}/{object_name}' ({reason}) as {content_type}"
+        )
+    else:
+        logging.info(f"Uploading '{object_name}' ({reason}) [{content_type}]...")
+        try:
+            with open(file_path, "rb") as f:
+                conn.put_object(
+                    container,
+                    object_name,
+                    contents=f,
+                    content_type=content_type,
+                    headers={"X-Object-Meta-Mtime": str(local_mtime)},
+                )
+        except Exception as e:
+            logging.error(f"Failed to upload '{object_name}': {e}")
+
+
+def cmd_upload(args, conn):
+    if not args.dry_run:
+        try:
+            conn.put_container(args.container)
+        except ClientException as e:
+            logging.error(f"Could not access/create container '{args.container}': {e}")
+            return
+
+    files_found = glob.glob(args.path, recursive=args.recursive)
+    if not files_found:
+        logging.warning(f"No files matched: {args.path}")
+        return
+
+    dest_is_folder = False
+    if args.destination:
+        if args.recursive or len(files_found) > 1 or args.destination.endswith("/"):
+            dest_is_folder = True
+
+    for entry in files_found:
+        current_dest = args.destination
+        if dest_is_folder and current_dest and not current_dest.endswith("/"):
+            current_dest += "/"
+
+        if os.path.isfile(entry):
+            base = os.path.dirname(entry)
+            _upload_file(conn, args.container, entry, base, args.dry_run, current_dest)
+
+        elif os.path.isdir(entry):
+            if args.recursive:
+                logging.debug(f"Scanning directory: {entry}")
+                for root, _, files in os.walk(entry):
+                    for file in files:
+                        full_path = os.path.join(root, file)
+                        rec_dest = args.destination
+                        if rec_dest and not rec_dest.endswith("/"):
+                            rec_dest += "/"
+                        _upload_file(
+                            conn,
+                            args.container,
+                            full_path,
+                            entry,
+                            args.dry_run,
+                            rec_dest,
+                        )
+            else:
+                logging.warning(f"Skipping directory '{entry}' (use -r to upload)")
+
+
+def cmd_list(args, conn):
+    """Handles the list subcommand. Include Content-Type."""
+    delimiter = None if args.recursive else "/"
+    prefix = args.prefix if args.prefix else None
+
+    try:
+        _, objects = conn.get_container(
+            args.container, prefix=prefix, delimiter=delimiter
+        )
+
+        if not objects:
+            if not args.quiet:
+                print(f"(Container '{args.container}' is empty or prefix not found)")
+            return
+
+        output_rows = []
+        for obj in objects:
+            row = {}
+            if "subdir" in obj:
+                row["name"] = obj["subdir"].rstrip("/") + "/"
+                row["bytes"] = 0
+                row["time"] = ""
+                row["type"] = "directory"
+            else:
+                row["name"] = obj["name"]
+                row["bytes"] = obj["bytes"]
+                row["type"] = obj.get("content_type", "unknown")
+
+                t_str = obj["last_modified"]
+                try:
+                    dt = datetime.datetime.strptime(
+                        t_str.split(".")[0], "%Y-%m-%dT%H:%M:%S"
+                    )
+                    row["time"] = dt.strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    row["time"] = t_str
+            output_rows.append(row)
+
+        print(f"total {len(output_rows)}")
+
+        # Columns: Size(10)  Time(16)  Type(25)  Name
+        for row in output_rows:
+            if args.human:
+                size_str = sizeof_fmt(row["bytes"])
+            else:
+                size_str = str(row["bytes"])
+
+            if row["bytes"] == 0 and row["time"] == "":
+                size_str = "-"
+
+            print(f"{size_str:>10}  {row['time']:<16} {row['type']:<25} {row['name']}")
+
+    except ClientException as e:
+        logging.error(f"Error listing container '{args.container}': {e}")
+
+
+def cmd_delete(args, conn):
+    target = args.path
+    has_wildcard = any(c in target for c in ["*", "?", "["])
+    objects_to_delete = []
+
+    if has_wildcard:
+        safe_prefix = _get_safe_prefix(target)
+        delimiter = None if args.recursive else "/"
+
+        logging.debug(f"Wildcard detected. Listing with prefix='{safe_prefix}'")
+
+        try:
+            _, objects = conn.get_container(
+                args.container, prefix=safe_prefix, delimiter=delimiter
+            )
+
+            for obj in objects:
+                if "name" in obj:
+                    if fnmatch.fnmatch(obj["name"], target):
+                        objects_to_delete.append(obj["name"])
+
+            if not objects_to_delete:
+                logging.warning(f"No objects matched pattern: {target}")
+                return
+
+        except ClientException as e:
+            logging.error(f"Error listing container for wildcard match: {e}")
+            return
+
+    else:
+        is_directory_style = target.endswith("/")
+
+        if args.recursive or is_directory_style:
+            try:
+                _, objects = conn.get_container(args.container, prefix=target)
+                objects_to_delete = [obj["name"] for obj in objects]
+
+                if not objects_to_delete:
+                    logging.warning(f"No objects found matching prefix: {target}")
+                    return
+            except ClientException as e:
+                logging.error(f"Error accessing container '{args.container}': {e}")
+                return
+        else:
+            objects_to_delete = [target]
+
+    count = 0
+    for obj_name in objects_to_delete:
+        if args.dry_run:
+            logging.info(f"[DRY RUN] Would delete: {obj_name}")
+            count += 1
+        else:
+            try:
+                conn.delete_object(args.container, obj_name)
+                logging.info(f"Deleted: {obj_name}")
+                count += 1
+            except ClientException as e:
+                logging.error(f"Failed to delete '{obj_name}': {e}")
+
+    logging.info(f"Operation complete. Total processed: {count}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="OpenStack Swift CLI Tool")
+    default_config = os.path.expanduser("~/swift_tools.cfg")
+    parser.add_argument(
+        "--config",
+        default=default_config,
+        help=f"Path to config file (default: {default_config})",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Simulate actions")
+
+    v_group = parser.add_mutually_exclusive_group()
+    v_group.add_argument(
+        "-v", "--verbose", action="count", default=0, help="Increase verbosity"
+    )
+    v_group.add_argument(
+        "-q", "--quiet", action="store_true", help="Decrease verbosity"
+    )
+
+    parser.add_argument("container", help="Target Swift container name")
+
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Action")
+
+    p_upload = subparsers.add_parser("upload", help="Upload files")
+    p_upload.add_argument("path", help="Source file, folder, or wildcard")
+    p_upload.add_argument(
+        "destination", nargs="?", help="Optional: Remote destination path or filename"
+    )
+    p_upload.add_argument(
+        "-r", "--recursive", action="store_true", help="Recurse into directories"
+    )
+    p_upload.set_defaults(func=cmd_upload)
+
+    p_list = subparsers.add_parser("list", help="List contents", add_help=False)
+    p_list.add_argument("prefix", nargs="?", help="Optional folder prefix")
+    p_list.add_argument(
+        "-r", "--recursive", action="store_true", help="List recursively (flat)"
+    )
+    p_list.add_argument(
+        "-h", "--human", action="store_true", help="Human readable sizes"
+    )
+    p_list.add_argument("--help", action="help", help="show this help message and exit")
+    p_list.set_defaults(func=cmd_list)
+
+    p_delete = subparsers.add_parser("delete", help="Delete files")
+    p_delete.add_argument(
+        "path", help="Remote object name, prefix, or wildcard (quoted)"
+    )
+    p_delete.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Delete matching prefix or wildcard pattern recursively",
+    )
+    p_delete.set_defaults(func=cmd_delete)
+
+    args = parser.parse_args()
+
+    setup_logging(-1 if args.quiet else args.verbose)
+
+    try:
+        conn = get_swift_connection(args.config)
+        args.func(args, conn)
+    except Exception as e:
+        logging.critical(f"Error: {e}")
