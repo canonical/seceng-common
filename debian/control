@@ -16,7 +16,7 @@ Pre-Depends:
 Depends:
  ${misc:Depends},
  python3,
- bash,
+ bash (>= 5.2.21),
  bzip2
 Description: [seceng] Security Engineering Common Tools
  Tools and resources used by multiple packages
