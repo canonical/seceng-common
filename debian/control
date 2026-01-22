@@ -1,0 +1,22 @@
+Source: seceng-common
+Section: net
+Priority: optional
+Maintainer: Paulo Flabiano Smorigo <pfsmorigo@canonical.com>
+Build-Depends:
+ debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/canonical/seceng-common
+Rules-Requires-Root: no
+
+Package: seceng-common
+Architecture: all
+Pre-Depends:
+ debconf (>= 1.5.86),
+ adduser
+Depends:
+ ${misc:Depends},
+ python3,
+ bash (>= 5.2.21),
+ bzip2
+Description: [seceng] Security Engineering Common Tools
+ Tools and resources used by multiple packages

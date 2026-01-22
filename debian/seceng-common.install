@@ -1,0 +1,2 @@
+scripts/lpl_common.py usr/libexec/seceng-common/
+scripts/send_notification.py usr/libexec/seceng-common/
