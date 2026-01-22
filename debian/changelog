@@ -1,3 +1,9 @@
+seceng-common (1.0.1) noble; urgency=medium
+
+  * Include new scripts in the install file.
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Thu, 22 Jan 2026 18:53:25 +0000
+
 seceng-common (1.0.0) noble; urgency=medium
 
   * Add repo-sync script.
