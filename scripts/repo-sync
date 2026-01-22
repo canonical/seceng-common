@@ -1,0 +1,44 @@
+#!/bin/bash -e
+
+# ./repo-sync URL DIR CHECK_FILE [CONFIG_DIR]
+
+URL=$1
+DIR=$2
+CHECK_FILE=$3
+CONFIG_DIR=$4
+
+SSH_ENV=$HOME/.ssh_env
+SSH_ENV="/tmp/sct-sync_ssh_env"
+
+ssh_start_agent() {
+	echo -n "Initialising new SSH agent... "
+	ssh-agent | sed 's/^echo/#echo/' > "$SSH_ENV"
+	echo "Done."
+	chmod 600 "$SSH_ENV"
+	. "$SSH_ENV" > /dev/null
+}
+
+if [ -e "$CONFIG_DIR/passphrase" ]; then
+	if [ -f "$SSH_ENV" ]; then
+		. "$SSH_ENV" > /dev/null
+		ps -ef | grep ${SSH_AGENT_PID} \
+			| grep ssh-agent$ > /dev/null || ssh_start_agent
+	else
+		ssh_start_agent
+	fi
+	cat $CONFIG_DIR/passphrase \
+		| SSH_ASKPASS=/bin/cat setsid -w ssh-add $CONFIG_DIR/id_rsa \
+		> /dev/null 2>&1
+fi
+
+if [ -e "$DIR/$CHECK_FILE" ]; then
+	echo "Refreshing $DIR..."
+	/usr/bin/git -C $DIR pull --ff-only
+else
+	if /usr/bin/git clone $URL $DIR; then
+		echo "Cloned $DIR repository."
+	else
+		echo "Error cloning $DIR repository."
+		exit 1
+	fi
+fi

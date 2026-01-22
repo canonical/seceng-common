@@ -1,3 +1,9 @@
+seceng-common (1.0.0) noble; urgency=medium
+
+  * Add repo-sync script.
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Thu, 22 Jan 2026 17:33:02 +0000
+
 seceng-common (0.0.1) noble; urgency=medium
 
   * Initial Release.

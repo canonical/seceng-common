@@ -1,0 +1,63 @@
+SOURCE := $(shell dpkg-parsechangelog --show-field Source)
+VERSION := $(shell dpkg-parsechangelog --show-field Version)
+PACKAGES := $(shell grep Package: debian/control | cut -d: -f2 | xargs)
+BINARIES := $(foreach PACKAGE,$(PACKAGES),../$(PACKAGE)_${VERSION}_all.deb)
+CHANGES_FILE := ../${SOURCE}_${VERSION}_source.changes
+PPA := ubuntu-security-infra
+
+LAST_TAG := $(shell git describe --tags --abbrev=0)
+LOG_TEXT := $(shell git log --oneline --pretty=format:"%s" $(LAST_TAG)..HEAD)
+
+default:
+	@echo "Source .... ${SOURCE}"
+	@echo "Version ... ${VERSION}"
+	@echo "Packages .. ${PACKAGES}"
+	@echo "Binaries .. ${BINARIES}"
+	@echo "Changes ... ${CHANGES_FILE}"
+	@echo "PPA ....... ${PPA}"
+
+all: ${PACKAGES}
+
+${PACKAGES}: debian
+	echo $@
+
+staging production: debian
+	dput ppa:${PPA}/$@ ${CHANGES_FILE}
+
+debian:
+	debuild -S
+
+debian-sign:
+	debsign ${CHANGES_FILE}
+
+binaries: ${BINARIES}
+
+show: ${BINARIES} show-debs
+
+show-debs:
+	@$(foreach DEB,$(BINARIES),echo "\n$(DEB):" && dpkg --contents $(DEB);)
+	@$(foreach DEB,$(BINARIES),echo "\n$(DEB):" && dpkg --contents $(DEB);)
+
+${BINARIES}:
+	debuild -uc -us
+
+install-deps:
+	apt-get install -qq devscripts debhelper-compat
+
+refresh-dependencies:
+	cp ../ubuntu-qa-tools/common/lpl_common.py scripts/
+
+changelog:
+	dch -e -U -m "$(LOG_TEXT)"
+
+clean:
+	$(RM) -r debian/*.debhelper debian/.debhelper \
+	debian/debhelper-build-stamp \
+	debian/files \
+	$(addprefix debian/, $(PACKAGES)) \
+	$(addprefix debian/, $(addsuffix .substvars, $(PACKAGES))) \
+	$(BINARIES) $(CHANGES_FILE)
+
+.PHONY: debian ${PACKAGES}
+
+# vim: syntax=make
