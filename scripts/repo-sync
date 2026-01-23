@@ -1,14 +1,11 @@
 #!/bin/bash -e
 
-# ./repo-sync URL DIR CHECK_FILE [CONFIG_DIR]
-
-URL=$1
-DIR=$2
-CHECK_FILE=$3
-CONFIG_DIR=$4
-
-SSH_ENV=$HOME/.ssh_env
-SSH_ENV="/tmp/sct-sync_ssh_env"
+USAGE="Usage: $0 URL DIR [CHECK_FILE] [SSH_DIR] [SSH_ENV]"
+URL="${1:?$USAGE}"
+DIR="${2:?$USAGE}"
+CHECK_FILE=${3:-README.md}
+SSH_DIR=${4:-$HOME/.ssh}
+SSH_ENV=${5:-$SSH_DIR/environment}
 
 ssh_start_agent() {
 	echo -n "Initialising new SSH agent... "
@@ -18,7 +15,7 @@ ssh_start_agent() {
 	. "$SSH_ENV" > /dev/null
 }
 
-if [ -e "$CONFIG_DIR/passphrase" ]; then
+if [ -e "$SSH_DIR/passphrase" ]; then
 	if [ -f "$SSH_ENV" ]; then
 		. "$SSH_ENV" > /dev/null
 		ps -ef | grep ${SSH_AGENT_PID} \
@@ -26,8 +23,8 @@ if [ -e "$CONFIG_DIR/passphrase" ]; then
 	else
 		ssh_start_agent
 	fi
-	cat $CONFIG_DIR/passphrase \
-		| SSH_ASKPASS=/bin/cat setsid -w ssh-add $CONFIG_DIR/id_rsa \
+	cat $SSH_DIR/passphrase \
+		| SSH_ASKPASS=/bin/cat setsid -w ssh-add $SSH_DIR/id_rsa \
 		> /dev/null 2>&1
 fi
 

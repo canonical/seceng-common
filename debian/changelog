@@ -1,3 +1,9 @@
+seceng-common (1.0.2) noble; urgency=medium
+
+  * Bug fixes and improvements for repo-sync.
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Fri, 23 Jan 2026 01:59:53 +0000
+
 seceng-common (1.0.1) noble; urgency=medium
 
   * Include new scripts in the install file.
