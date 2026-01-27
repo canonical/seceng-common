@@ -1,0 +1,9 @@
+HEADER TO: ['notification_owner@email.net']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: Summary
+From: security+send_notification@ubuntu.com
+To: notification_owner@email.net
+
+Notification trigged and no emails were sent.

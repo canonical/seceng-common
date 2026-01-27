@@ -1,0 +1,49 @@
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] Notification Example
+From: My Notification <security+my_notification@ubuntu.com>
+To: another@email.net
+
+Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
+
+
+
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] Another notification
+From: Another Notification <security+another_notification@ubuntu.com>
+To: another@email.net
+
+Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
+
+
+
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] Yet Another notification
+From: Yet Another Notification <security+yet_another_notification@ubuntu.com>
+To: another@email.net
+
+Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
+
+
+
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] Summary
+From: config+from@email.net
+To: another@email.net
+
+Notification trigged and 3 emails sent:
+
+ - "[my_notification] Notification Example" to another@email.net
+ - "[my_notification] Another notification" to another@email.net
+ - "[my_notification] Yet Another notification" to another@email.net

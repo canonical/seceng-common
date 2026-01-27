@@ -1,0 +1,19 @@
+HEADER TO: ['destination1@email.net', 'destination2@email.net', 'in_bcc1@email.net', 'in_bcc2@email.net', 'in_cc1@email.net', 'in_cc2@email.net']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: Notification Test
+From: security+test@ubuntu.com
+To: destination1@email.net, destination2@email.net
+Cc: in_cc1@email.net, in_cc2@email.net
+
+1: one
+2: two
+3: three
+4: four four
+5: five
+it's working
+
+ERRORS:
+
+this is an error

@@ -1,0 +1,28 @@
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] config_subject
+From: config+from@email.net
+To: another@email.net
+
+it's working
+
+ERRORS:
+
+this is an error
+
+
+
+
+HEADER TO: ['another@email.net', 'noreply+test1@canonical.com', 'noreply+test2@canonical.com']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [my_notification] Summary
+From: config+from@email.net
+To: another@email.net
+
+Notification trigged and 1 emails sent:
+
+ - "[my_notification] config_subject" to another@email.net
