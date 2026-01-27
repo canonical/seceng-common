@@ -1,11 +1,11 @@
 #!/bin/bash -e
 
-USAGE="Usage: $0 URL DIR [CHECK_FILE] [SSH_DIR] [SSH_ENV]"
+USAGE="Usage: $0 URL DIR [CHECK_FILE] [SSH_KEY] [SSH_ENV]"
 URL="${1:?$USAGE}"
 DIR="${2:?$USAGE}"
 CHECK_FILE=${3:-README.md}
-SSH_DIR=${4:-$HOME/.ssh}
-SSH_ENV=${5:-$SSH_DIR/environment}
+SSH_KEY=${4:-$HOME/.ssh/id_rsa}
+SSH_ENV=${5:-$HOME/.ssh/environment}
 
 ssh_start_agent() {
 	echo -n "Initialising new SSH agent... "
@@ -15,7 +15,7 @@ ssh_start_agent() {
 	. "$SSH_ENV" > /dev/null
 }
 
-if [ -e "$SSH_DIR/passphrase" ]; then
+if [ -e "$SSH_KEY.passphrase" ]; then
 	if [ -f "$SSH_ENV" ]; then
 		. "$SSH_ENV" > /dev/null
 		ps -ef | grep ${SSH_AGENT_PID} \
@@ -23,9 +23,8 @@ if [ -e "$SSH_DIR/passphrase" ]; then
 	else
 		ssh_start_agent
 	fi
-	cat $SSH_DIR/passphrase \
-		| SSH_ASKPASS=/bin/cat setsid -w ssh-add $SSH_DIR/id_rsa \
-		> /dev/null 2>&1
+	cat $SSH_KEY.passphrase \
+		| SSH_ASKPASS=/bin/cat setsid -w ssh-add $SSH_KEY > /dev/null 2>&1
 fi
 
 if [ -e "$DIR/$CHECK_FILE" ]; then
