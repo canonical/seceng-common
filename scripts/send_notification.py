@@ -78,8 +78,7 @@ class SendNotification:
             self.add_notification(sender, to, subject, content, cc, bcc)
 
         if self.config.send_summary:
-            if not sender:
-                sender = 'security+send_notification@ubuntu.com'
+            sender = f'security+{Path.home().name}@ubuntu.com'
             to = self.normalize_emails(self.config.send_summary)
             if len(self.notifications) > 0:
                 content = f'Notification trigged and {len(self.notifications)} emails sent:\n\n'
