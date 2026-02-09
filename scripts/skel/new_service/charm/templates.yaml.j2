@@ -1,0 +1,9 @@
+files:
+  - name: '/etc/seceng/{{ name }}!mode=755/config.ini'
+    user: '{{ name }}'
+    group: '{{ name }}'
+    permission: '0o600'
+    template: |
+      [example]
+      var1 = value1
+      var2 = {secret['my_secret']['my_secret_attribute']}

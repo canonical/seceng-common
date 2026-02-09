@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+NAME={{ name }}
+
+case "$1" in
+    purge)
+        if [ ! -f /var/lib/${NAME} ]; then
+			rm -rf /var/lib/${NAME}
+            echo "Home directory for ${NAME} user removed"
+        fi
+
+        # Remove the user only if it exists
+        if id "${NAME}" >/dev/null 2>&1; then
+            deluser --system ${NAME}
+            echo "User ${NAME} removed"
+        fi
+
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

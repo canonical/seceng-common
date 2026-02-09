@@ -1,0 +1,10 @@
+[Unit]
+Description = My Service
+
+[Timer]
+OnBootSec = 15min
+OnUnitActiveSec = 1d
+Persistent=true
+
+[Install]
+WantedBy = timers.target

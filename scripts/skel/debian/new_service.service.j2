@@ -1,0 +1,12 @@
+[Unit]
+Description = My Notification Service
+Requires = uct-sync.service
+
+[Service]
+ExecStart = /usr/libexec/seceng-common/send_notification.py -vvv -d --exec /usr/libexec/%p/my_script.sh
+User = %p
+Group = %p
+EnvironmentFile=/etc/seceng/%p/environment
+
+[Install]
+WantedBy = multi-user.target

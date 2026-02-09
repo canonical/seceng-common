@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+NAME={{ name }}
+
+case "$1" in
+    configure)
+        # Create a system user if it does not exist
+        if ! id "${NAME}" >/dev/null 2>&1; then
+            adduser --system --group --disabled-login --home /var/lib/${NAME} ${NAME}
+            echo "User ${NAME} created"
+            usermod -a -G uct-sync ${NAME}
+            echo "User ${NAME} added to uct-sync group"
+        fi
+
+        if [ ! -f /etc/apt/apt.conf.d/50-seceng-notifications ]; then
+            echo "Unattended-Upgrade::Origins-Pattern { \"origin=LP-PPA-ubuntu-security-infra-*\"; };" \
+                > /etc/apt/apt.conf.d/50-seceng-notifications
+            echo "Ubuntu Security Infra PPA added to Unattended Upgrade"
+        fi
+
+        # Create the log file
+        touch /var/log/${NAME}.log
+        chown ${NAME}: /var/log/${NAME}.log
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

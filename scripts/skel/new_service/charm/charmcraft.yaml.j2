@@ -1,0 +1,33 @@
+name: canonical-seceng-{{ name }}
+type: charm
+summary: Canonical Security Engineering FILL ME
+description: FILL ME
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    plugin: charm
+    charm-strict-dependencies: true
+    source: .
+    build-packages:
+      - git
+
+config:
+  options:
+    log-level:
+      description: |
+        Configures the log level.
+        Acceptable values are: "info", "debug", "warning", "error" and "critical"
+      default: "info"
+      type: string
+    deployment:
+      description: |
+        Deployment type. Acceptable values are: "staging", and "production"
+      default: "staging"
+      type: string
+    SECRET:
+      description: Credentials to access SECRET
+      type: secret
