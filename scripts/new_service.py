@@ -4,11 +4,35 @@ import argparse
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-TO_DO_TEXT = '''
-To Do:
- - Add entry in debian/control;
- - Check all generated files and fill/change it accordingly;
-'''
+CONTROL_ENTRY_TEMPLATE = """
+Package: {name}
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${{misc:Depends}},
+ adduser,
+ bash,
+ seceng-common
+Description: [seceng] {name}
+"""
+
+def update_debian_control(project_directory, name):
+    control_path = project_directory / 'debian' / 'control'
+    if not control_path.exists():
+        print(f"Warning: {control_path} not found. Skipping control entry.")
+        return
+
+    with open(control_path, 'r') as f:
+        content = f.read()
+
+    if f'Package: {name}' in content:
+        print(f"Entry for {name} already exists in debian/control. Skipping.")
+        return
+
+    print(f"Adding entry for {name} to debian/control...")
+    entry = CONTROL_ENTRY_TEMPLATE.format(name=name)
+    with open(control_path, 'a') as f:
+        f.write(entry)
 
 def main():
     parser = argparse.ArgumentParser(description="Import a project to the service.")
@@ -50,7 +74,9 @@ def main():
             with open(destination_path, 'w') as config_file:
                 config_file.write(rendered_config)
 
-    print(TO_DO_TEXT)
+    update_debian_control(project_directory, args.name)
+
+    print("\nNow check all generated files and fill/change it accordingly")
 
 if __name__ == "__main__":
     main()
