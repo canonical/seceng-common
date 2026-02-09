@@ -1,0 +1,5 @@
+http_proxy="http://squid.internal:3128/"
+https_proxy="http://squid.internal:3128/"
+NO_PROXY="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.canonical.com,.launchpad.net,.internal,.jujucharms.com"
+UCT="/var/lib/ubuntu-cve-tracker"
+SCT="/var/lib/soss-cve-tracker"

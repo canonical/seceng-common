@@ -53,14 +53,28 @@ def main():
     project_name = f"seceng-{args.type if args.type == 'data' else 'notifications'}"
     project_directory = repo_root / project_name
 
-    for file_path in skel_directory.rglob(f'*.j2'):
+    for file_path in skel_directory.rglob('*'):
+        if not file_path.is_file():
+            continue
+
+        rendered_config = ""
         # Setup template
-        env = Environment(loader=FileSystemLoader(file_path.parent))
-        template = env.get_template(file_path.name)
-        rendered_config = template.render(config_data)
+        if file_path.suffix == '.j2':
+            env = Environment(loader=FileSystemLoader(file_path.parent))
+            template = env.get_template(file_path.name)
+            rendered_config = template.render(config_data)
+            extension = ""
+        else:
+            with open(file_path, 'r') as f:
+                rendered_config = f.read()
+            extension = file_path.suffix
 
         # Set the destination file and path
-        destination_file = Path(str(file_path.relative_to(skel_directory)).replace('new_service', config_data['name'])).with_suffix('')
+        relative_path = file_path.relative_to(skel_directory)
+        destination_file = Path(str(relative_path).replace('new_service', config_data['name']))
+        if file_path.suffix == '.j2':
+            destination_file = destination_file.with_suffix(extension)
+
         destination_path = project_directory / destination_file
 
         # Create directories if necessary

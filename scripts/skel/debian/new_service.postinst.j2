@@ -18,10 +18,6 @@ case "$1" in
                 > /etc/apt/apt.conf.d/50-seceng-notifications
             echo "Ubuntu Security Infra PPA added to Unattended Upgrade"
         fi
-
-        # Create the log file
-        touch /var/log/${NAME}.log
-        chown ${NAME}: /var/log/${NAME}.log
     ;;
 esac
 
