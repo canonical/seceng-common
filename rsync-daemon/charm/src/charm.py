@@ -8,6 +8,7 @@ from ops.model import ActiveStatus
 
 from charmlibs.seceng import utils
 from charmlibs.seceng.base import Snap, Package, SecEngCharmBase
+from charmlibs.seceng.interfaces import RsyncRelationUnitData
 
 
 class RsyncDaemonCharm(SecEngCharmBase):
@@ -18,12 +19,13 @@ class RsyncDaemonCharm(SecEngCharmBase):
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.secret_changed, self._on_secret_changed)
         framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        framework.observe(self.on.start, self._on_start)
+        framework.observe(self.on.stop, self._on_stop)
 
-        framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.rsync_module_relation_changed, self._on_relation_changed)
         framework.observe(self.on.rsync_module_relation_broken, self._on_relation_broken)
 
-    def _on_install(self, event: ops.InstallEvent):
+    def _setup_rsync(self):
         """ Install rsync and setup the base configuration """
         self.unit.status = ops.MaintenanceStatus("Installing rsync")
 
@@ -31,7 +33,8 @@ class RsyncDaemonCharm(SecEngCharmBase):
         subprocess.check_call(['apt-get', 'install', '-y', 'rsync'])
 
         # Write the global rsync config
-        rsyncd_config = """uid = nobody
+        with utils.open_file_secure(pathlib.Path('/etc/rsyncd.conf'), mode=0o644, text=True) as file:
+            file.write("""uid = nobody
 gid = nogroup
 use chroot = yes
 max connections = 20
@@ -39,11 +42,7 @@ syslog facility = local5
 pid file = /run/rsyncd.pid
 &include /etc/rsyncd.conf.d/
 """
-        pathlib.Path('/etc/rsyncd.conf').write_text(rsyncd_config)
         pathlib.Path('/etc/rsyncd.conf.d').mkdir(exist_ok=True)
-
-        subprocess.check_call(['systemctl', 'enable', 'rsync'])
-        subprocess.check_call(['systemctl', 'start', 'rsync'])
 
         self.unit.status = ops.ActiveStatus("rsync daemon running")
 
@@ -55,28 +54,29 @@ pid file = /run/rsyncd.pid
             return
 
         # Fetch the data provided by nvd-sync
-        data = event.relation.data[remote_unit]
-        path = data.get('path')
-        module_name = data.get('module_name')
-        read_only = data.get('read_only', 'yes')
-        comment = data.get('comment', '')
+        data = event.relation.load(RsyncRelationUnitData, remote_unit)
 
         # Ensure the principal charm has populated the data before proceeding
-        if not path or not module_name:
+        # FIXME: move validation to pydantic model
+        if not data.path or not data.module:
             return
 
-        self.unit.status = ops.MaintenanceStatus(f"Configuring [{module_name}] module")
+        self.unit.status = ops.MaintenanceStatus(f"Configuring [{data.module}] module")
 
         # Write the drop-in configuration
-        conf_content = f"""[{module_name}]
-    path = {path}
-    comment = {comment}
-    read only = {read_only}
+        conf_content = f"""[{data.module}]
+    path = {data.path}
+    comment = {data.comment}
+    read only = {"yes" if data.read_only else "no"}
     list = yes
 """
         # Using the relation id for the conf filename to allow for proper cleanup when a relation is broken
-        conf_file = pathlib.Path(f'/etc/rsyncd.conf.d/relation-{event.relation.id}.conf')
-        conf_file.write_text(conf_content)
+        with utils.open_file_secure(
+            pathlib.Path(f'/etc/rsyncd.conf.d/relation-{event.relation.id}.conf'),
+            mode=0o644,
+            text=True
+        ) as conf_file:
+            conf_file.write(conf_content)
 
         # Restart to apply changes
         subprocess.check_call(['systemctl', 'restart', 'rsync'])
@@ -93,6 +93,7 @@ pid file = /run/rsyncd.pid
         self.unit.status = ops.ActiveStatus("rsync daemon running")
 
     def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        self._setup_rsync()
         self.unit.status = ActiveStatus('ready (config)')
 
     def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
@@ -100,6 +101,14 @@ pid file = /run/rsyncd.pid
 
     def _on_upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
         self.unit.status = ActiveStatus('ready (upgrade)')
+
+    def _on_start(self, event: ops.StartEvent) -> None:
+        subprocess.check_call(['systemctl', 'enable', 'rsync'])
+        subprocess.check_call(['systemctl', 'start', 'rsync'])
+
+    def _on_stop(self, event: ops.StopEvent) -> None:
+        subprocess.check_call(['systemctl', 'stop', 'rsync'])
+        subprocess.check_call(['systemctl', 'disable', 'rsync'])
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(RsyncDaemonCharm)

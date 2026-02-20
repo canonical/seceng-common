@@ -30,7 +30,6 @@ config:
       default: "production"
       type: string
 
-requires:
+provides:
   rsync-module:
     interface: rsync-module
-    scope: container
