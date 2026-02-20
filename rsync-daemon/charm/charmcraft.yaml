@@ -27,7 +27,7 @@ config:
     deployment:
       description: |
         Deployment type. Acceptable values are: "staging", and "production"
-      default: "staging"
+      default: "production"
       type: string
 
 requires:
