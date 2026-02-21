@@ -12,7 +12,7 @@ from charmlibs.seceng.interfaces import RsyncRelationUnitData
 
 
 class RsyncDaemonCharm(SecEngCharmBase):
-    """Charm the service."""
+    """ Charm the service """
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
@@ -41,7 +41,7 @@ max connections = 20
 syslog facility = local5
 pid file = /run/rsyncd.pid
 &include /etc/rsyncd.conf.d/
-"""
+""")
         pathlib.Path('/etc/rsyncd.conf.d').mkdir(exist_ok=True)
 
         self.unit.status = ops.ActiveStatus("rsync daemon running")
@@ -80,7 +80,7 @@ pid file = /run/rsyncd.pid
 
         # Restart to apply changes
         subprocess.check_call(['systemctl', 'restart', 'rsync'])
-        self.unit.status = ops.ActiveStatus(f"Serving module [{module_name}]")
+        self.unit.status = ops.ActiveStatus(f"Serving module [{data.module}]")
 
     def _on_relation_broken(self, event: ops.RelationBrokenEvent):
         """ Clean up a relation's config when removed """
