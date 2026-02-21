@@ -1,0 +1,40 @@
+name: canonical-seceng-rsync-daemon
+type: charm
+subordinate: true
+summary: Canonical Security Engineering rsync subordinate charm to expose directories via rsync
+description: Installs and configures an rsync daemon module for a principal charm
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    plugin: charm
+    charm-strict-dependencies: true
+    source: .
+    build-packages:
+      - git
+
+config:
+  options:
+    log-level:
+      description: |
+        Configures the log level.
+        Acceptable values are: "info", "debug", "warning", "error" and "critical"
+      default: "info"
+      type: string
+    deployment:
+      description: |
+        Deployment type. Acceptable values are: "staging", and "production"
+      default: "production"
+      type: string
+
+provides:
+  rsync-module:
+    interface: rsync-module
+
+requires:
+  juju-info:
+    interface: juju-info
+    scope: container
