@@ -2,6 +2,7 @@
 # Copyright 2026 Canonical Ltd.
 
 import ops
+import json
 import pathlib
 import subprocess
 from ops.model import ActiveStatus
@@ -9,6 +10,15 @@ from ops.model import ActiveStatus
 from charmlibs.seceng import utils
 from charmlibs.seceng.base import Snap, Package, SecEngCharmBase
 from charmlibs.seceng.interfaces import RsyncRelationUnitData
+
+def _safe_json_decoder(val):
+    """ Custom decoder to handle Juju's auto-injected network data """
+
+    try:
+        return json.loads(val)
+    except json.JSONDecodeError:
+        # Catch and return the raw string for extra fields added by Juju, e.g.: private-address, ingress-address, egress-subnets
+        return val
 
 
 class RsyncDaemonCharm(SecEngCharmBase):
@@ -54,7 +64,7 @@ pid file = /run/rsyncd.pid
             return
 
         # Fetch the data provided by nvd-sync
-        data = event.relation.load(RsyncRelationUnitData, remote_unit)
+        data = event.relation.load(RsyncRelationUnitData, remote_unit, decoder=_safe_json_decoder)
 
         # Ensure the principal charm has populated the data before proceeding
         # FIXME: move validation to pydantic model
