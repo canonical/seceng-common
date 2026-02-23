@@ -1,0 +1,72 @@
+[project]
+name = "canonical-seceng-rsync-daemon"
+description = "Rsync daemon subordinate charm"
+license = "Apache-2.0"
+authors = [
+    {name="The Security Engineering team at Canonical Ltd."},
+]
+dependencies = [
+    "ops<3",
+    "charmlibs-seceng @ git+https://github.com/canonical/seceng-common@main#subdirectory=charmlib",
+]
+dynamic = ["version"]
+
+[build-system]
+requires = [
+    "setuptools >=80",
+    "setuptools_scm >=8",
+]
+build-backend = "setuptools.build_meta"
+
+# Required group: these are all dependencies required to run all the charm's tests.
+[dependency-groups]
+test = [
+    "ops[testing]",
+    "pytest",
+    "coverage[toml]",
+    "jubilant",
+]
+
+# Testing tools configuration
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+# Linting tools configuration
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "W", "F", "C", "N", "D", "I001"]
+lint.extend-ignore = [
+    "D105",
+    "D107",
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+    "I001",
+]
+extend-exclude = ["__pycache__", "*.egg_info"]
+lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+format.quote-style = "preserve"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
+
+[tool.pyright]
+include = ["src/**.py"]
