@@ -7,7 +7,7 @@ authors = [
 ]
 dependencies = [
     "ops<3",
-    "charmlibs-seceng @ git+https://github.com/canonical/seceng-common@add-rsync-daemon-charm#subdirectory=charmlib",
+    "charmlibs-seceng @ git+https://github.com/canonical/seceng-common@main#subdirectory=charmlib",
 ]
 dynamic = ["version"]
 
