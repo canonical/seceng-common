@@ -31,7 +31,7 @@ from .types import JSON
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class Package:
     name: str
-    ppa: str = 'ubuntu-security-infra'
+    ppa: str | None = 'ubuntu-security-infra'
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -87,7 +87,6 @@ class SecEngCharmBase(ops.CharmBase):
     creating files from juju secrets.
     """
 
-    package_install_ppa = 'ubuntu-security-infra'
     package_install_list: list[Package] = []
     snap_install_list: list[Snap] = []
 
@@ -121,7 +120,9 @@ class SecEngCharmBase(ops.CharmBase):
 
     def _install_ppa_and_packages(self) -> None:
         previous_ppas = set(typing.cast(list[str], self._stored.configured_ppas))
-        new_ppas = {f'ppa:{package.ppa}/{self.config["deployment"]}' for package in self.package_install_list}
+        new_ppas = {
+            f'ppa:{package.ppa}/{self.config["deployment"]}' for package in self.package_install_list if package.ppa
+        }
         for old_ppa in previous_ppas - new_ppas:
             # FIXME: find a solution.
             # Do not do anything, because it could interfere with other charms.
