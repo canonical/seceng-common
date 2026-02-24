@@ -1,0 +1,27 @@
+CHARM_NAME := $(shell cat charmcraft.yaml | grep name: | cut -d' ' -f2)
+CHARM_FILE := ${CHARM_NAME}_amd64.charm
+LAST_REVISION = $(shell charmcraft revisions ${CHARM_NAME} 2> /dev/null| head -n 2 | tail -n 1 | cut -d' ' -f1)
+
+charm:
+	@echo "Charm name: ${CHARM_NAME}"
+	@echo "Charm file: ${CHARM_FILE}"
+	@echo "Revision: ${LAST_REVISION}"
+
+pack:
+	charmcraft $@
+
+upload: ${CHARM_FILE}
+	charmcraft $@ $<
+
+release-beta: ${CHARM_FILE}
+	charmcraft release ${CHARM_NAME} --revision=${LAST_REVISION} --channel=beta
+
+release-stable: ${CHARM_FILE}
+	charmcraft release ${CHARM_NAME} --revision=${LAST_REVISION} --channel=stable
+
+release-all: release-beta release-stable
+
+clean:
+	$(RM) -r ${CHARM_FILE}
+
+# vim: syntax=make

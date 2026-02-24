@@ -24,7 +24,7 @@ ${PACKAGES}: debian
 staging production: debian
 	dput ppa:${PPA}/$@ ${CHANGES_FILE}
 
-staging2prodution:
+unembargo:
 	${UQT}/security-tools/unembargo --ppa ${PPA}/staging --destination ${PPA}/production ${SOURCE}
 
 debian:
