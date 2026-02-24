@@ -25,12 +25,13 @@ import sys
 import typing
 from collections import deque
 
+import ops
 import pydantic
 import pydantic_core
 import yaml
 
 from . import utils
-from .types import JSON, JSONType
+from .types import JSONType
 
 
 class TemplateError(Exception):
@@ -214,11 +215,49 @@ class State(pydantic.BaseModel):
     info: dict[str, TemplateInfo] = {}
 
 
-class TemplateEngine:
-    def __init__(self, *, context: dict[str, Namespace], state: JSON | None = None, base_dir: pathlib.Path):
-        self.context = context
-        self.state = State.model_validate(state) if state is not None else State()
-        self.base_dir = base_dir
+type Context = dict[str, Namespace]
+
+
+class TemplateEngine(ops.Object):
+    _stored = ops.StoredState()  # type: ignore[no-untyped-call]
+
+    def __init__(self, charm: ops.CharmBase):
+        super().__init__(charm, None)
+
+        # Restore state from what may have been saved.
+        try:
+            self.state = State.model_validate(self._stored.state)
+        except AttributeError:
+            self.state = State()
+
+    @property
+    def base_dir(self) -> pathlib.Path:
+        return self.framework.charm_dir
+
+    def process(self, *filepaths: pathlib.Path, dirty_secrets: set[str] = set()) -> None:
+        # Compute the context in which the templates will be executed.
+        context = {
+            'config': Namespace(),
+            'secret': Namespace(),
+        }
+        for name, cfg_value in self.model.config.items():
+            option_type = self.framework.meta.config.get(name)
+            if not option_type:
+                continue
+            if option_type.type == 'secret':
+                if not isinstance(cfg_value, str):
+                    logging.warning(
+                        f"Unexpected type for charm configuration item '{name}'"
+                        f" of type 'secret': {type(cfg_value).__name__}."
+                    )
+                    continue
+                secret_object = self.model.get_secret(id=cfg_value)
+                secret_content = secret_object.get_content(refresh=True)
+                setattr(context['secret'], name, secret_content)
+                if dirty_secrets and cfg_value in dirty_secrets:
+                    context['secret'].mark_dirty(name)
+            else:
+                setattr(context['config'], name, cfg_value)
 
         # Check if any of the values in the context have changed since the last
         # invocation, based on the state.
@@ -228,24 +267,22 @@ class TemplateEngine:
                 state_context = self.state.context[ctx_name]
             except KeyError:
                 state_context = None
-            for key, value in ctx_namespace.items():
+            for key, ctx_value in ctx_namespace.items():
                 if state_context is None or key not in state_context:
                     ctx_namespace.mark_dirty(key)
-                elif value != state_context[key]:
+                elif ctx_value != state_context[key]:
                     ctx_namespace.mark_dirty(key)
         self.state.context = {ctx_name: dict(ctx_namespace.items()) for ctx_name, ctx_namespace in context.items()}
 
-    def save_state(self) -> JSON:
-        return self.state.model_dump()
-
-    def process(self, *filepaths: pathlib.Path) -> None:
+        # Process the template files.
         actions: deque[Action] = deque()
         for filepath in filepaths:
-            self._process_template_file(filepath, actions)
+            self._process_template_file(filepath, context, actions)
         for action in actions:
             action.execute()
+        self._stored.state = self.state.model_dump()
 
-    def _process_template_file(self, filepath: pathlib.Path, actions: deque[Action]) -> None:
+    def _process_template_file(self, filepath: pathlib.Path, context: Context, actions: deque[Action]) -> None:
         def update_actions(new_actions: collections.abc.Iterable[Action]) -> None:
             # This function updates actions (in the outer scope) to add the
             # entries in new_actions, but without duplicating entries in
@@ -273,22 +310,22 @@ class TemplateEngine:
                 raise
 
         for debconf_entry in template_config.debconf:
-            entry_actions = self._process_debconf_entry(debconf_entry)
+            entry_actions = self._process_debconf_entry(debconf_entry, context=context)
             update_actions(entry_actions)
 
         for file_entry in template_config.files:
-            entry_actions = self._process_file_entry(file_entry)
+            entry_actions = self._process_file_entry(file_entry, context=context)
             update_actions(entry_actions)
 
-    def _process_debconf_entry(self, entry: DebconfConfig) -> collections.abc.Iterable[Action]:
-        previous_hash = self._check_dirty(f'debconf:{entry.name}')
+    def _process_debconf_entry(self, entry: DebconfConfig, *, context: Context) -> collections.abc.Iterable[Action]:
+        previous_hash = self._check_dirty(f'debconf:{entry.name}', context=context)
 
         template_hash = hashlib.sha256(entry.template.encode('utf-8')).hexdigest()
         if template_hash == previous_hash:
             return []
 
         try:
-            value, accesses = self._evaluate_template(entry.template)
+            value, accesses = self._evaluate_template(entry.template, context=context)
         except TemplateError as e:
             if entry.silentfail:
                 logging.debug(
@@ -328,8 +365,8 @@ class TemplateEngine:
 
         return entry.actions + [DpkgReconfigureAction(entry.package)]
 
-    def _process_file_entry(self, entry: FileConfig) -> collections.abc.Iterable[Action]:
-        previous_hash = self._check_dirty(f'file:{entry.name}')
+    def _process_file_entry(self, entry: FileConfig, *, context: Context) -> collections.abc.Iterable[Action]:
+        previous_hash = self._check_dirty(f'file:{entry.name}', context=context)
 
         accesses: collections.abc.Iterable[AccessInfo]
 
@@ -350,7 +387,7 @@ class TemplateEngine:
                 return []
 
             try:
-                content, accesses = self._evaluate_template(entry.template)
+                content, accesses = self._evaluate_template(entry.template, context=context)
             except TemplateError as e:
                 if entry.silentfail:
                     logging.debug(
@@ -379,7 +416,7 @@ class TemplateEngine:
 
         return entry.actions
 
-    def _check_dirty(self, entry_name: str) -> str | None:
+    def _check_dirty(self, entry_name: str, *, context: Context) -> str | None:
         """Check if a template entry needs to be re-processed.
 
         Returns a hash of the previous template processed. If the current
@@ -398,7 +435,7 @@ class TemplateEngine:
 
         for access_info in info.accessed:
             try:
-                namespace = self.context[access_info.namespace]
+                namespace = context[access_info.namespace]
             except KeyError:
                 # The current context no longer contains the named namespace,
                 # it may no longer be necessary. This is strange, because on an
@@ -414,9 +451,14 @@ class TemplateEngine:
         # changed.
         return info.hash
 
-    def _evaluate_template(self, template: str) -> tuple[str, collections.abc.Iterable[AccessInfo]]:
+    def _evaluate_template(
+        self,
+        template: str,
+        *,
+        context: Context,
+    ) -> tuple[str, collections.abc.Iterable[AccessInfo]]:
         # First, clear the access for all the namespaces.
-        for namespace in self.context.values():
+        for namespace in context.values():
             namespace.clear_access()
 
         # The following line doesn't actually work if template contains the
@@ -436,12 +478,12 @@ class TemplateEngine:
         # embedded in the same distribution artifact as the code that calls
         # this method).
         try:
-            value = eval(template, self.context.copy())
+            value = eval(template, context.copy())
         except (AttributeError, KeyError):
             raise TemplateError("referenced object does not exist")
 
         accesses: list[AccessInfo] = []
-        for namespace_name, namespace in self.context.items():
+        for namespace_name, namespace in context.items():
             for attribute in namespace.get_access():
                 accesses.append(AccessInfo(namespace=namespace_name, attribute=attribute))
 

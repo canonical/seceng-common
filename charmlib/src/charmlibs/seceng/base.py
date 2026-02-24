@@ -25,7 +25,6 @@ from ops.model import MaintenanceStatus
 
 from . import template
 from . import utils
-from .types import JSON
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -102,7 +101,6 @@ class SecEngCharmBase(ops.CharmBase):
         framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrage_charm)
 
         self._stored.set_default(configured_ppas=[], installed_packages=[])
-        self._stored.set_default(template_state=None)
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         self._install_ppa_and_packages()
@@ -255,36 +253,11 @@ class SecEngCharmBase(ops.CharmBase):
         self.unit.status = MaintenanceStatus('Installing templates')
         logging.info("About to install templates...")
 
-        context = {
-            'config': template.Namespace(),
-            'secret': template.Namespace(),
-        }
-        for name, value in self.config.items():
-            option_type = self.meta.config.get(name)
-            if not option_type:
-                continue
-            if option_type.type == 'secret':
-                if not isinstance(value, str):
-                    logging.warning(
-                        f"Unexpected type for charm configuration item '{name}'"
-                        f" of type 'secret': {type(value).__name__}."
-                    )
-                    continue
-                secret_object = self.model.get_secret(id=value)
-                secret_content = secret_object.get_content(refresh=True)
-                setattr(context['secret'], name, secret_content)
-                if dirty_secrets and value in dirty_secrets:
-                    context['secret'].mark_dirty(name)
-            else:
-                setattr(context['config'], name, value)
-
-        engine = template.TemplateEngine(
-            context=context,
-            state=typing.cast(JSON | None, self._stored.template_state),
-            base_dir=self.charm_dir,
-        )
+        engine = template.TemplateEngine(self)
 
         with importlib.resources.as_file(importlib.resources.files() / 'templates.yaml') as filepath:
-            engine.process(filepath, *(self.charm_dir / template for template in self.templates))
-
-        self._stored.template_state = engine.save_state()
+            engine.process(
+                filepath,
+                *(self.charm_dir / template for template in self.templates),
+                dirty_secrets=dirty_secrets,
+            )
