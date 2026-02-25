@@ -2,3 +2,4 @@ scripts/lpl_common.py usr/libexec/seceng-common/
 scripts/send_notification.py usr/libexec/seceng-common/
 scripts/repo-sync usr/libexec/seceng-common/
 scripts/swift_tools usr/libexec/seceng-common/
+etc/50-seceng-infra etc/apt/apt.conf.d/
