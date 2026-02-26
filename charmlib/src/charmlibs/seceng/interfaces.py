@@ -106,6 +106,7 @@ class ServerRelationUnitData(BaseRelationData):
 
 class ServerRelationProviderUnitData(ServerRelationUnitData):
     ready: bool
+    requirers: set[str]
 
 
 class ServerRelationRequirerUnitData(ServerRelationUnitData):
