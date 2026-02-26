@@ -16,6 +16,7 @@ import traceback
 import typing
 import uuid
 
+import ops
 import pydantic
 
 from .types import JSONType
@@ -34,6 +35,8 @@ def safe_json_decoder() -> collections.abc.Iterator[collections.abc.Callable[[st
 
     It will print a warning message, containing a backtrace, if it is not
     actually needed.
+
+    See also BaseRelationData.load_from_relation() which uses this.
     """
     invoked = False
     had_errors = False
@@ -59,14 +62,30 @@ def safe_json_decoder() -> collections.abc.Iterator[collections.abc.Callable[[st
             logging.warning("".join(stack_format))
 
 
-class RsyncRelationUnitData(pydantic.BaseModel):
+class BaseRelationData(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(validate_by_name=True)
+
+    @classmethod
+    def load_from_relation(
+        cls,
+        relation: ops.Relation,
+        src: ops.Application | ops.Unit,
+        /,
+        *args: typing.Any,
+        **kw: typing.Any,
+    ) -> typing.Self:
+        with safe_json_decoder() as decoder:
+            return relation.load(cls, src, *args, decoder=decoder, **kw)
+
+
+class RsyncRelationUnitData(BaseRelationData):
     path: str
     module: str
-    read_only: bool = True
+    read_only: bool = pydantic.Field(alias='read-only', default=True)
     comment: str
 
 
-class ServerRelationUnitData(pydantic.BaseModel):
+class ServerRelationUnitData(BaseRelationData):
     @staticmethod
     def get_machine_id() -> uuid.UUID:
         try:
