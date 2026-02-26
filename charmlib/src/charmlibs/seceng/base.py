@@ -23,8 +23,8 @@ import pydantic
 import yaml
 from ops.model import MaintenanceStatus
 
-from . import template
 from . import utils
+from .template import TemplateEngine
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -100,6 +100,7 @@ class SecEngCharmBase(ops.CharmBase):
         framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
         framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrage_charm)
 
+        self.template_engine = TemplateEngine(self)
         self._stored.set_default(configured_ppas=[], installed_packages=[])
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
@@ -253,10 +254,8 @@ class SecEngCharmBase(ops.CharmBase):
         self.unit.status = MaintenanceStatus('Installing templates')
         logging.info("About to install templates...")
 
-        engine = template.TemplateEngine(self)
-
         with importlib.resources.as_file(importlib.resources.files() / 'templates.yaml') as filepath:
-            engine.process(
+            self.template_engine.process(
                 filepath,
                 *(self.charm_dir / template for template in self.templates),
                 dirty_secrets=dirty_secrets,
