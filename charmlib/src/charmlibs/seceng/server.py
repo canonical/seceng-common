@@ -57,7 +57,7 @@ class ServerRequirer(ops.Object):
     @server_data.setter
     def server_data(self, value: ServerRelationProviderUnitData | None) -> None:
         self.__dict__['server_data'] = value
-        self._stored.server_data = value.model_dump() if value is not None else None
+        self._stored.server_data = value.model_dump(mode='json') if value is not None else None
 
     @property
     def ready(self) -> bool:
