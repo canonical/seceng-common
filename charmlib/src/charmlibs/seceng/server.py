@@ -43,11 +43,21 @@ class ServerRequirer(ops.Object):
 
     @property
     def server_data(self) -> ServerRelationProviderUnitData | None:
-        return typing.cast(ServerRelationProviderUnitData | None, self._stored.server_data)
+        try:
+            value = typing.cast(ServerRelationProviderUnitData | None, self.__dict__['server_data'])
+        except KeyError:
+            raw_data = self._stored.server_data
+            if raw_data is not None:
+                value = ServerRelationProviderUnitData.model_validate(raw_data)
+            else:
+                value = None
+            self.__dict__['server_data'] = value
+        return value
 
     @server_data.setter
     def server_data(self, value: ServerRelationProviderUnitData | None) -> None:
-        self._stored.server_data = value
+        self.__dict__['server_data'] = value
+        self._stored.server_data = value.model_dump() if value is not None else None
 
     @property
     def ready(self) -> bool:
@@ -107,6 +117,8 @@ class ServerRequirer(ops.Object):
         # FIXME: emit disconnected
 
     def _update_relation(self, relation: ops.Relation) -> None:
+        if not relation.active:
+            return
         # FIXME: these are due to mypy and pyright not supporting pydantic's
         # field alias functionality. Re-evaluate periodically because they
         # won't be reported once they're no longer necessary.
