@@ -124,6 +124,28 @@ class TestSendNotification(unittest.TestCase):
         self.assertEqual(expected, result)
 
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
+    def test_use_only_on_stderr_with_error(self):
+        """Test use summary and no emails sent."""
+        sn = SendNotification(command=TEST_SH,
+                              sender='security+test@ubuntu.com',
+                              to=['destination@email.net'],
+                              subject='Notification Test',
+                              only_on_stderr=True)
+        expected, result = self.run_test('test_use_only_on_stderr_with_error', str(sn))
+        self.assertEqual(expected, result)
+
+    @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
+    def test_use_only_on_stderr_without_error(self):
+        """Test use summary and no emails sent."""
+        sn = SendNotification(command=f'{TEST_SH} noerror',
+                              sender='security+test@ubuntu.com',
+                              to=['destination@email.net'],
+                              subject='Notification Test',
+                              only_on_stderr=True)
+        expected, result = self.run_test('test_use_only_on_stderr_without_error', str(sn))
+        self.assertEqual(expected, result)
+
+    @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_config_default(self):
         """Test default configuration."""
         expected = {
@@ -131,6 +153,7 @@ class TestSendNotification(unittest.TestCase):
                 'add_prefix': None,
                 'send_summary': [],
                 'replace_to': [],
+                'only_on_stderr': False,
                 'smtp_config': {
                     'default': {
                         'server': 'mx.canonical.com',
@@ -156,6 +179,7 @@ class TestSendNotification(unittest.TestCase):
                 'add_prefix': 'my_notification',
                 'send_summary': ['summary@email.net'],
                 'replace_to': ['another@email.net'],
+                'only_on_stderr': False,
                 'smtp_config': {
                     'default': {
                         'server': 'localhost',
@@ -189,6 +213,22 @@ class TestSendNotification(unittest.TestCase):
         sn = SendNotification(command=TEST_SH)
         expected, result = self.run_test('test_config_custom_exec', str(sn))
         self.assertEqual(expected, result)
+
+    @patch('send_notification.CONFIG_PATH', _TEST_DIRECTORY / 'config_dir')
+    def test_config_only_on_stderr_true(self):
+        """Test only_on_stderr set to True in config file."""
+        config_content = "[default]\nonly_on_stderr = True\n"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_config = Path(tmp_dir) / 'config.ini'
+            tmp_config.write_text(config_content)
+            with patch('send_notification.CONFIG_PATH', Path(tmp_dir)):
+                sn = SendNotification(command=f'{TEST_SH} noerror',
+                                      sender='security+test@ubuntu.com',
+                                      to=['destination@email.net'],
+                                      subject='Notification Test')
+                # Since it's noerror and only_on_stderr=True from config, no notification should be sent.
+                self.assertEqual(len(sn.notifications), 0)
+                self.assertTrue(sn.config.only_on_stderr)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.CRITICAL)
