@@ -22,6 +22,9 @@ class TestSendNotification(unittest.TestCase):
 
     def setUp(self):
         self.os_name = platform.system()
+        self.mock_home = patch('pathlib.Path.home', return_value=Path('/home/example'))
+        self.mock_home.start()
+        self.addCleanup(self.mock_home.stop)
 
     def run_test(self, filename, output):
         test_full_path = _TEST_DIRECTORY / Path(filename)
