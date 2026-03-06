@@ -1,0 +1,13 @@
+HEADER TO: ['destination@email.net']
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: Notification Test
+From: security+test@ubuntu.com
+To: destination@email.net
+
+it's working
+
+ERRORS:
+
+this is an error
