@@ -6,7 +6,7 @@ authors = [
     {name="The Security Engineering team at Canonical Ltd."},
 ]
 dependencies = [
-    "ops<3",
+    "ops<4",
     "charmlibs-seceng @ git+https://github.com/canonical/seceng-common@main#subdirectory=charmlib",
 ]
 dynamic = ["version"]
