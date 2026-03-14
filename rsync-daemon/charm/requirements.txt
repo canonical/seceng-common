@@ -22,7 +22,7 @@ pydantic==2.12.5
     # via
     #   canonical-seceng-rsync-daemon (pyproject.toml)
     #   charmlibs-seceng
-pydantic-core==2.41.5
+pydantic-core==2.42.0
     # via pydantic
 pyyaml==6.0.3
     # via ops
