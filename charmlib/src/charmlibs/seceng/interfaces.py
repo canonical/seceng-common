@@ -139,10 +139,8 @@ class LocalRelationUnitData(BaseRelationData):
 class LocalRelationProviderUnitData(LocalRelationUnitData):
     """Do FIXME."""
 
-    # ready: bool = False
-    # requirers: set[str] = pydantic.Field(default_factory=set)
-    ready: bool
-    requirers: set[str]
+    ready: bool = False
+    requirers: set[str] = pydantic.Field(default_factory=set)
 
 
 class LocalRelationRequirerUnitData(LocalRelationUnitData):
