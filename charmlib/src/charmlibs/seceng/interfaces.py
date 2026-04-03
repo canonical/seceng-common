@@ -503,7 +503,7 @@ class _LocalRequirer[
 
         try:
             data = type(self).provider_data_type.load_from_relation(event.relation, remote_unit)
-        except pydantic.ValidationError as e:
+        except (pydantic.ValidationError, ValueError) as e:
             logging.warning(f"Local service relation provider '{remote_unit.name}' provided invalid data: {e}.")
             return
 
