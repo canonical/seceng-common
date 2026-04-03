@@ -1,0 +1,20 @@
+files:
+  - silentfail: true
+    name: /etc/apt/apt.conf.d/90seceng-proxy
+    permission: '0o644'
+    template: |
+      Acquire::http::Proxy "{config.proxy}"
+
+  - silentfail: true
+    name: /etc/environment.d/90seceng-proxy.conf
+    permission: '0o644'
+    template: |
+      http_proxy="{config.proxy}"
+      https_proxy="{config.proxy}"
+
+  - silentfail: true
+    name: /etc/profile.d/seceng-proxy.sh
+    permission: '0o644'
+    template: |
+      export http_proxy="{config.proxy}"
+      export https_proxy="{config.proxy}"
