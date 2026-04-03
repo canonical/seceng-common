@@ -15,11 +15,11 @@ from .interfaces import LocalProvider, LocalRequirer, LocalRelationProviderUnitD
 
 
 class ServerProviderUnitData(LocalRelationProviderUnitData):
-    """Do FIXME."""
+    """Data sent by a server provider."""
 
 
 class ServerRequirerUnitData(LocalRelationRequirerUnitData):
-    """Do FIXME."""
+    """Data sent by a server requirer."""
 
 
 # See the comment below for ServerRequirer, applicable here as well.
