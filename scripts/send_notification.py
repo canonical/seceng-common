@@ -65,6 +65,7 @@ class SendNotification:
         config_overrides.replace_to = self.normalize_emails(config_overrides.replace_to)
 
         self.notifications = []
+        self.command_returncode = 0
 
         self.config = Configuration(config_overrides)
 
@@ -192,6 +193,7 @@ class SendNotification:
 
             stdout = ''.join(stdout_lines)
             stderr = ''.join(stderr_lines)
+            self.command_returncode = proc.returncode
             output = stdout
             if stderr:
                 logging.warning(stderr)
@@ -220,6 +222,7 @@ class SendNotification:
             return output
 
     def send(self, debuglevel=0):
+        fails = 0
         for notification in self.notifications:
             try:
                 smtp_config = self.config.get_smtp_config(notification.sender)
@@ -238,6 +241,8 @@ class SendNotification:
                     logging.info('Email sent successfully!')
             except Exception as e:
                 logging.error(f'Error sending notification: {e}')
+                fails += 1
+        return fails
 
     def __str__(self):
         return '\n\n\n\n'.join([str(f"HEADER TO: {n.all_receivers}\n{n}") for n in self.notifications])
@@ -397,7 +402,11 @@ def main():
         logging.info(sn)
     else:
         # Rebalance the verbose number to level with the debuglevel from SMTP
-        sn.send(debuglevel=args.verbose-3)
+        fails = sn.send(debuglevel=args.verbose-3)
+        if sn.command_returncode:
+            sys.exit(sn.command_returncode)
+        if fails:
+            sys.exit()
 
     logging.info(f'{TITLE} ended')
 
