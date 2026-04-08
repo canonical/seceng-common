@@ -12,7 +12,7 @@ from unittest.mock import patch, Mock
 
 _TEST_DIRECTORY = Path(__file__).resolve().parent
 sys.path.append(str(_TEST_DIRECTORY.parent))
-from send_notification import SendNotification, CONFIG_PATH
+from send_notification import SendNotification, EmailParams, ConfigOverrides, CONFIG_PATH
 
 TEST_JSON = str(_TEST_DIRECTORY / 'test.json')
 EMPTY_JSON = str(_TEST_DIRECTORY / 'empty.json')
@@ -45,9 +45,9 @@ class TestSendNotification(unittest.TestCase):
     def test_use_exec(self):
         """Test use exec input."""
         sn = SendNotification(command=TEST_SH,
-                                                sender='security+test@ubuntu.com',
-                                                to=['destination@email.net'],
-                                                subject='Notification Test')
+                              email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                       to=['destination@email.net'],
+                                                       subject='Notification Test'))
         expected, result = self.run_test('test_use_exec', str(sn))
         self.assertEqual(expected, result)
 
@@ -55,9 +55,9 @@ class TestSendNotification(unittest.TestCase):
     def test_use_exec_local_dir(self):
         """Test use exec input with script in local directory."""
         sn = SendNotification(command=TEST_SH,
-                                                sender='security+test@ubuntu.com',
-                                                to=['destination@email.net'],
-                                                subject='Notification Test')
+                              email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                       to=['destination@email.net'],
+                                                       subject='Notification Test'))
         expected, result = self.run_test('test_use_exec_local_dir', str(sn))
         self.assertEqual(expected, result)
 
@@ -72,11 +72,11 @@ class TestSendNotification(unittest.TestCase):
     def test_use_exec_with_arguments(self):
         """Test use exec with arguments."""
         sn = SendNotification(command=f'{TEST_SH} one two three "four four" five',
-                                                sender='security+test@ubuntu.com',
-                                                to=['destination1@email.net', 'destination2@email.net'],
-                                                cc=['in_cc1@email.net', 'in_cc2@email.net'],
-                                                bcc=['in_bcc1@email.net', 'in_bcc2@email.net'],
-                                                subject='Notification Test')
+                              email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                       to=['destination1@email.net', 'destination2@email.net'],
+                                                       subject='Notification Test',
+                                                       cc=['in_cc1@email.net', 'in_cc2@email.net'],
+                                                       bcc=['in_bcc1@email.net', 'in_bcc2@email.net']))
         expected, result = self.run_test('test_use_exec_with_arguments', str(sn))
         self.assertEqual(expected, result)
 
@@ -91,35 +91,40 @@ class TestSendNotification(unittest.TestCase):
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_use_include_bcc(self):
         """Test use include-bcc argument."""
-        sn = SendNotification(command=f'{TEST_SH} json', include_bcc=['debug@email.net', 'debug2@email.net'])
+        sn = SendNotification(command=f'{TEST_SH} json',
+                              config_overrides=ConfigOverrides(include_bcc=['debug@email.net', 'debug2@email.net']))
         expected, result = self.run_test('test_use_include_bcc', str(sn))
         self.assertEqual(expected, result)
 
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_use_add_prefix(self):
         """Test use add-prefix argument."""
-        sn = SendNotification(command=f'{TEST_SH} json', add_prefix='new notification')
+        sn = SendNotification(command=f'{TEST_SH} json',
+                              config_overrides=ConfigOverrides(add_prefix='new notification'))
         expected, result = self.run_test('test_use_add_prefix', str(sn))
         self.assertEqual(expected, result)
 
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_use_replace_to(self):
         """Test use replace-to argument."""
-        sn = SendNotification(command=f'{TEST_SH} json', replace_to=['debug@email.net', 'debug2@email.net'])
+        sn = SendNotification(command=f'{TEST_SH} json',
+                              config_overrides=ConfigOverrides(replace_to=['debug@email.net', 'debug2@email.net']))
         expected, result = self.run_test('test_use_replace_to', str(sn))
         self.assertEqual(expected, result)
 
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_use_summary(self):
         """Test use summary."""
-        sn = SendNotification(json=TEST_JSON, send_summary=['notification_owner@email.net'])
+        sn = SendNotification(json=TEST_JSON,
+                              config_overrides=ConfigOverrides(send_summary=['notification_owner@email.net']))
         expected, result = self.run_test('test_use_summary', str(sn))
         self.assertEqual(expected, result)
 
     @patch('send_notification.CONFIG_PATH', Path('/dev/null'))
     def test_use_summary_no_emails_sent(self):
         """Test use summary and no emails sent."""
-        sn = SendNotification(json=EMPTY_JSON, send_summary=['notification_owner@email.net'])
+        sn = SendNotification(json=EMPTY_JSON,
+                              config_overrides=ConfigOverrides(send_summary=['notification_owner@email.net']))
         expected, result = self.run_test('test_use_summary_no_emails_sent', str(sn))
         self.assertEqual(expected, result)
 
@@ -127,10 +132,10 @@ class TestSendNotification(unittest.TestCase):
     def test_use_only_on_stderr_with_error(self):
         """Test use summary and no emails sent."""
         sn = SendNotification(command=TEST_SH,
-                              sender='security+test@ubuntu.com',
-                              to=['destination@email.net'],
-                              subject='Notification Test',
-                              only_on_stderr=True)
+                              email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                       to=['destination@email.net'],
+                                                       subject='Notification Test'),
+                              config_overrides=ConfigOverrides(only_on_stderr=True))
         expected, result = self.run_test('test_use_only_on_stderr_with_error', str(sn))
         self.assertEqual(expected, result)
 
@@ -138,10 +143,10 @@ class TestSendNotification(unittest.TestCase):
     def test_use_only_on_stderr_without_error(self):
         """Test use summary and no emails sent."""
         sn = SendNotification(command=f'{TEST_SH} noerror',
-                              sender='security+test@ubuntu.com',
-                              to=['destination@email.net'],
-                              subject='Notification Test',
-                              only_on_stderr=True)
+                              email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                       to=['destination@email.net'],
+                                                       subject='Notification Test'),
+                              config_overrides=ConfigOverrides(only_on_stderr=True))
         expected, result = self.run_test('test_use_only_on_stderr_without_error', str(sn))
         self.assertEqual(expected, result)
 
@@ -223,9 +228,9 @@ class TestSendNotification(unittest.TestCase):
             tmp_config.write_text(config_content)
             with patch('send_notification.CONFIG_PATH', Path(tmp_dir)):
                 sn = SendNotification(command=f'{TEST_SH} noerror',
-                                      sender='security+test@ubuntu.com',
-                                      to=['destination@email.net'],
-                                      subject='Notification Test')
+                                      email_params=EmailParams(sender='security+test@ubuntu.com',
+                                                               to=['destination@email.net'],
+                                                               subject='Notification Test'))
                 # Since it's noerror and only_on_stderr=True from config, no notification should be sent.
                 self.assertEqual(len(sn.notifications), 0)
                 self.assertTrue(sn.config.only_on_stderr)
