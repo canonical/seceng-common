@@ -178,25 +178,37 @@ class SendNotification:
                 sys.exit(1)
 
         logging.info(f'Running command: {command_parts}')
-        output = ''
-        result = None
+        stdout_lines = []
+        stderr_lines = []
         try:
-            result = subprocess.run(command_parts, capture_output=True, text=True)
-            output = result.stdout
-            if result.stderr:
-                logging.warning(result.stderr)
-                output += f'\nERRORS:\n\n{result.stderr}'
+            with subprocess.Popen(command_parts, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+                for line in proc.stdout:
+                    print(line, end='', flush=True)
+                    stdout_lines.append(line)
+                for line in proc.stderr:
+                    print(line, end='', file=sys.stderr, flush=True)
+                    stderr_lines.append(line)
+                proc.wait()
 
-            if self.config.only_on_stderr and not result.stderr:
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
+            output = stdout
+            if stderr:
+                logging.warning(stderr)
+                output += f'\nERRORS:\n\n{stderr}'
+
+            if self.config.only_on_stderr and not stderr:
                 return None
         except Exception as e:
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
             output = f"An unexpected error occurred: {e}"
-            if result.stdout:
-                output += f'\nSTDOUT:\n\n{result.stdout}'
-            if result.stderr:
-                output += f'\nSTDERR:\n\n{result.stderr}'
+            if stdout:
+                output += f'\nSTDOUT:\n\n{stdout}'
+            if stderr:
+                output += f'\nSTDERR:\n\n{stderr}'
 
-        if self.config.only_on_stderr and not result.stderr:
+        if self.config.only_on_stderr and not ''.join(stderr_lines):
             return None
 
         # Try validate the output as a JSON file
