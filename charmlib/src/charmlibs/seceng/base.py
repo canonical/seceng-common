@@ -96,11 +96,31 @@ class SecEngCharmBase(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
+        self._setup_proxies()
         framework.observe(self.on.config_changed, self._seceng_base_on_config_changed)
         framework.observe(self.on.secret_changed, self._seceng_base_on_secret_changed)
         framework.observe(self.on.upgrade_charm, self._seceng_base_on_upgrage_charm)
 
         self._stored.set_default(configured_ppas=[], installed_packages=[])
+
+    def _setup_proxies(self):
+        """Set up proxy environment variables based on Juju model configuration."""
+        # Check model configurations for proxy settings
+        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
+
+        if http_proxy:
+            os.environ["HTTP_PROXY"] = http_proxy
+            os.environ["http_proxy"] = http_proxy
+        
+        if https_proxy:
+            os.environ["HTTPS_PROXY"] = https_proxy
+            os.environ["https_proxy"] = https_proxy
+            
+        if no_proxy:
+            os.environ["NO_PROXY"] = no_proxy
+            os.environ["no_proxy"] = no_proxy
 
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         self._install_ppa_and_packages()
@@ -127,7 +147,7 @@ class SecEngCharmBase(ops.CharmBase):
             pass
         for new_ppa in new_ppas - previous_ppas:
             self.unit.status = MaintenanceStatus('Configuring PPA')
-            subprocess.check_call(['add-apt-repository', '--no-update', '--ppa', new_ppa])
+            subprocess.check_call(['add-apt-repository', '--yes', '--no-update', '--ppa', new_ppa])
         if new_ppas != previous_ppas:
             subprocess.check_call(['apt-get', 'update'])
             self._stored.configured_ppa = list(new_ppas)
