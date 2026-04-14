@@ -8,11 +8,11 @@ import platform
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch
 
 _TEST_DIRECTORY = Path(__file__).resolve().parent
 sys.path.append(str(_TEST_DIRECTORY.parent))
-from send_notification import SendNotification, EmailParams, ConfigOverrides, CONFIG_PATH, Notification, Configuration
+from send_notification import SendNotification, EmailParams, ConfigOverrides, Notification, Configuration
 
 TEST_JSON = str(_TEST_DIRECTORY / 'test.json')
 EMPTY_JSON = str(_TEST_DIRECTORY / 'empty.json')
