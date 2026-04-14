@@ -406,7 +406,7 @@ def main():
         if sn.command_returncode:
             sys.exit(sn.command_returncode)
         if fails:
-            sys.exit()
+            sys.exit(fails)
 
     logging.info(f'{TITLE} ended')
 
