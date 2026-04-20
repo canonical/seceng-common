@@ -78,7 +78,7 @@ pid file = /run/rsyncd.pid
     path = {data.path}
     comment = {data.comment}
     read only = {"yes" if data.read_only else "no"}
-    list = yes
+    list = {"no" if data.disable_listing else "yes"}
 """
         # Using the relation id for the conf filename to allow for proper cleanup when a relation is broken
         with utils.open_file_secure(
