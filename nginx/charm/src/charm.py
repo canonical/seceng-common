@@ -70,9 +70,11 @@ class SecEngNginxCharm(SecEngCharmBase):
 
     def _on_server_disconnected(self, event: LocalProviderDisconnectedEvent) -> None:
         logging.info(f"This unit is now disconnected from server {event.unit}.")
+        self._setup_nginx()
 
     def _on_server_ready(self, event: LocalProviderReadyEvent) -> None:
         logging.info(f"Server provider {event.unit} is now ready.")
+        self._setup_nginx()
 
     def _on_server_data_changed(self, event: LocalProviderDataChangedEvent[ServerProviderUnitData]) -> None:
         logging.info(f"Server provider {event.unit} data has changed.")
