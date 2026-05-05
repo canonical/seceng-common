@@ -1,3 +1,9 @@
+seceng-common (1.5.0) noble; urgency=medium
+
+  * Add git-sync and git-askpass
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Tue, 05 May 2026 17:54:00 +0000
+
 seceng-common (1.4.0) noble; urgency=medium
 
   * send_notification: Add --only-on-stderr
