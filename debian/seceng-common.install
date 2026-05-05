@@ -5,3 +5,4 @@ scripts/swift_tools usr/libexec/seceng-common/
 scripts/git-askpass usr/libexec/seceng-common/
 scripts/git-sync usr/libexec/seceng-common/
 etc/50-seceng-infra etc/apt/apt.conf.d/
+etc/ssh_known_hosts etc/ssh/
