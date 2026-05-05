@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# $CREDENTIALS_DIRECTORY is provided by systemd at runtime.
+# $GIT_CREDENTIAL is provided by the service script.
+
+if [ -n "$GIT_CREDENTIAL" ] && [ -f "$CREDENTIALS_DIRECTORY/$GIT_CREDENTIAL" ]; then
+    cat "$CREDENTIALS_DIRECTORY/$GIT_CREDENTIAL"
+else
+    echo "Error: GIT_CREDENTIAL not set or credential file not found." >&2
+    exit 1
+fi
