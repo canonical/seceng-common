@@ -13,5 +13,5 @@ if [ ! -d "$DIR/.git" ]; then
 		exit 1
 	fi
 else
-	GIT_CREDENTIAL="$CREDENTIAL" /usr/bin/git -C "$DIR" pull --ff-only
+	GIT_CREDENTIAL="$CREDENTIAL" /usr/bin/git -C "$DIR" pull --ff-only --quiet
 fi
