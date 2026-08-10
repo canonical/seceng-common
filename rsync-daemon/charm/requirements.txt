@@ -32,7 +32,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.3
     # via pydantic
 websocket-client==1.9.0
     # via ops
