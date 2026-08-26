@@ -28,7 +28,7 @@ SMTP_PORT = 25
 CONFIG_PATH = f'/etc/seceng/{os.environ.get("USER")}'
 
 class SendNotification:
-    def __init__(self, json=None, command=None, sender=None, to=None, subject=None, content=None, cc=None, bcc=None, include_bcc=None, add_prefix=None, send_summary=None, replace_to=None):
+    def __init__(self, json=None, command=None, sender=None, to=None, subject=None, content=None, cc=None, bcc=None, include_bcc=None, add_prefix=None, send_summary=None, replace_to=None, only_on_stderr=False):
 
         to = self.normalize_emails(to)
         cc = self.normalize_emails(cc)
@@ -39,7 +39,7 @@ class SendNotification:
 
         self.notifications = []
 
-        self.config = Configuration(include_bcc, add_prefix, send_summary, replace_to)
+        self.config = Configuration(include_bcc, add_prefix, send_summary, replace_to, only_on_stderr)
 
         if not sender and self.config.sender:
             sender = self.config.sender
@@ -65,7 +65,7 @@ class SendNotification:
 
         # If there still no content set and no json available, check the stdin for
         # content.
-        if content is None and not json and not self.notifications:
+        if content is None and not json and not command and not self.notifications:
            content = sys.stdin.read()
 
         if content:
@@ -159,12 +159,18 @@ class SendNotification:
             if result.stderr:
                 logging.warning(result.stderr)
                 output += f'\nERRORS:\n\n{result.stderr}'
+
+            if self.config.only_on_stderr and not result.stderr:
+                return None
         except Exception as e:
             output = f"An unexpected error occurred: {e}"
             if result.stdout:
                 output += f'\nSTDOUT:\n\n{result.stdout}'
             if result.stderr:
                 output += f'\nSTDERR:\n\n{result.stderr}'
+
+        if self.config.only_on_stderr and not result.stderr:
+            return None
 
         # Try validate the output as a JSON file
         try:
@@ -199,11 +205,12 @@ class SendNotification:
 
 
 class Configuration:
-    def __init__(self, include_bcc=[], add_prefix=None, send_summary=[], replace_to=[], section_name='default'):
+    def __init__(self, include_bcc=[], add_prefix=None, send_summary=[], replace_to=[], only_on_stderr=False, section_name='default'):
         self.include_bcc = include_bcc
         self.add_prefix = add_prefix
         self.send_summary = send_summary
         self.replace_to = replace_to
+        self.only_on_stderr = only_on_stderr
         self.smtp_config = {'default': {'server': SMTP_SERVER, 'port': SMTP_PORT }}
 
         self.sender = None
@@ -244,6 +251,8 @@ class Configuration:
                 for field in config[section_name]:
                     if field in ['to', 'cc', 'bcc', 'include_bcc', 'send_summary', 'replace_to']:
                         value = config[section_name][field].split(',')
+                    elif field == 'only_on_stderr':
+                        value = config.getboolean(section_name, field)
                     else:
                         value = config[section_name][field]
                     setattr(self, field, value)
@@ -294,6 +303,8 @@ def main():
                         help='send a summary of all notifications sent. Comma-separated list (e.g., email1,email2,email3)')
     parser.add_argument('--replace-to', type=str, default='', metavar='EMAIL',
                         help='replace destination email and skip cc/bcc recipients. This should be used just for testing.')
+    parser.add_argument('--only-on-stderr', action='store_true',
+                        help='only send email if the executed command produces content on stderr')
     parser.add_argument('--log', type=str,
                         help='log to a file')
     parser.add_argument('--print-config', action='store_true',
@@ -325,7 +336,8 @@ def main():
     sn = SendNotification(json=args.json, command=args.exec, sender=args.email_from,
                           to=args.email_to, subject=args.email_subject, cc=args.email_cc, bcc=args.email_bcc,
                           include_bcc=args.include_bcc, add_prefix=args.add_prefix,
-                          send_summary=args.send_summary, replace_to=args.replace_to)
+                          send_summary=args.send_summary, replace_to=args.replace_to,
+                          only_on_stderr=args.only_on_stderr)
 
     if args.dry_run:
         logging.info(sn)

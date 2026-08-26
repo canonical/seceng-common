@@ -659,4 +659,5 @@ class RsyncRelationUnitData(BaseRelationData):
     path: str
     module: str
     read_only: bool = pydantic.Field(alias='read-only', default=True)
+    disable_listing: bool = pydantic.Field(alias='disable-listing', default=False)
     comment: str

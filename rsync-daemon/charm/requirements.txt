@@ -4,37 +4,37 @@
 #
 #    pip-compile --strip-extras
 #
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
 charmlibs-seceng @ git+https://github.com/canonical/seceng-common@main#subdirectory=charmlib
     # via canonical-seceng-rsync-daemon (pyproject.toml)
-importlib-metadata==8.7.1
+importlib-metadata==9.0.0
     # via
     #   opentelemetry-api
     #   ops
-opentelemetry-api==1.39.1
+opentelemetry-api==1.44.0
     # via ops
-ops==2.23.2
+ops==3.8.1
     # via
     #   canonical-seceng-rsync-daemon (pyproject.toml)
     #   charmlibs-seceng
-pydantic==2.12.5
+pydantic==2.13.4
     # via
     #   canonical-seceng-rsync-daemon (pyproject.toml)
     #   charmlibs-seceng
-pydantic-core==2.41.5
+pydantic-core==2.48.0
     # via pydantic
 pyyaml==6.0.3
     # via ops
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.3
     # via pydantic
 websocket-client==1.9.0
     # via ops
-zipp==3.23.0
+zipp==4.1.0
     # via importlib-metadata

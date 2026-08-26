@@ -1,0 +1,1 @@
+Unattended-Upgrade::Origins-Pattern { "origin=LP-PPA-ubuntu-security-infra-*"; };

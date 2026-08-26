@@ -1,0 +1,6 @@
+#!/bin/bash
+
+mkdir -p /tmp/my_creds
+echo "it worked" > /tmp/my_creds/test-bot
+
+CREDENTIALS_DIRECTORY=/tmp/my_creds GIT_CREDENTIAL=test-bot ../git-askpass

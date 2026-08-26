@@ -1,3 +1,21 @@
+seceng-common (1.5.0) noble; urgency=medium
+
+  * Add git-sync and git-askpass
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Tue, 05 May 2026 17:54:00 +0000
+
+seceng-common (1.4.0) noble; urgency=medium
+
+  * send_notification: Add --only-on-stderr
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Thu, 12 Mar 2026 11:19:17 +0000
+
+seceng-common (1.3.0) noble; urgency=medium
+
+  * Add 50-seceng-infra apt configuration
+
+ -- Paulo Flabiano Smorigo <pfsmorigo@canonical.com>  Wed, 04 Mar 2026 19:56:04 +0000
+
 seceng-common (1.2.0) noble; urgency=medium
 
   * rsync-daemon: new subordinate charm added

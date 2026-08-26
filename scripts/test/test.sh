@@ -18,4 +18,4 @@ for ARG in "$@"; do
 done
 
 echo "it's working"
-echo "this is an error" >&2
+test "$1" == "noerror" || echo "this is an error" >&2
