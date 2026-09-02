@@ -298,9 +298,10 @@ class TemplateEngine(ops.Object):
             search_index = 0
             for action in new_actions:
                 try:
-                    search_index = actions.index(action, search_index)
+                    search_index = actions.index(action, search_index) + 1
                 except ValueError:
                     actions.insert(search_index, action)
+                    search_index += 1
 
         with open(filepath, 'r') as file:
             try:
@@ -380,6 +381,8 @@ class TemplateEngine(ops.Object):
                 create_parents=True,
                 check_hash=previous_hash,
             )
+            if template_hash == previous_hash:
+                return []
             accesses = []
         elif entry.template is not None:
             template_hash = hashlib.sha256(entry.template.encode('utf-8')).hexdigest()
