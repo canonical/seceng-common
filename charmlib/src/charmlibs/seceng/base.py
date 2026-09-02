@@ -169,7 +169,7 @@ class SecEngCharmBase(ops.CharmBase):
 
     def _install_snaps(self) -> None:
         for snap in self.snap_install_list:
-            self.unit.status = MaintenanceStatus('Installing Snap: {snap.name} {snap.channel}')
+            self.unit.status = MaintenanceStatus(f'Installing Snap: {snap.name} {snap.channel}')
             subprocess.check_call(["snap", "install", "--channel", snap.channel, snap.name])
 
     def _install_secrets(self, *, filter_secrets: set[str] = set()) -> None:

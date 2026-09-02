@@ -14,12 +14,13 @@ import stat
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 import pytest
 import yaml
 from ops import testing
 
-from charmlibs.seceng.base import DebconfConfig, FileConfig, SecEngCharmBase, SecretConfig, SecretsRoot
+from charmlibs.seceng.base import DebconfConfig, FileConfig, SecEngCharmBase, SecretConfig, SecretsRoot, Snap
 
 
 @pytest.fixture
@@ -34,6 +35,31 @@ def context() -> collections.abc.Iterator[testing.Context[SecEngCharmBase]]:
         },
         meta={
             'name': 'SecEngCharmBase',
+        },
+    )
+
+
+class SnapCharm(SecEngCharmBase):
+    snap_install_list = [Snap(name='test-snap', channel='edge')]
+
+    def _install_secrets(self, *, filter_secrets: set[str] = set()) -> None:
+        pass
+
+    def _install_templates(self, *, dirty_secrets: set[str] = set()) -> None:
+        pass
+
+
+@pytest.fixture
+def snap_context() -> collections.abc.Iterator[testing.Context[SnapCharm]]:
+    yield testing.Context(
+        SnapCharm,
+        config={
+            'options': {
+                'deployment': {'type': 'string'},
+            },
+        },
+        meta={
+            'name': 'SnapCharm',
         },
     )
 
@@ -56,6 +82,28 @@ def test_config_changed_state(context: testing.Context[SecEngCharmBase]) -> None
 
     # Act:
     context.run(context.on.config_changed(), state_in)
+
+
+def test_install_snaps(
+    snap_context: testing.Context[SnapCharm],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    check_call = mock.Mock()
+    monkeypatch.setattr(subprocess, 'check_call', check_call)
+    state_in = testing.State.from_context(
+        snap_context,
+        leader=True,
+        config={
+            'deployment': 'test',
+        },
+    )
+
+    state_out = snap_context.run(snap_context.on.config_changed(), state_in)
+
+    assert 'test-snap' in state_out.unit_status.message
+    assert 'edge' in state_out.unit_status.message
+    assert '{' not in state_out.unit_status.message
+    check_call.assert_called_once_with(['snap', 'install', '--channel', 'edge', 'test-snap'])
 
 
 def test_install_secrets_file(
