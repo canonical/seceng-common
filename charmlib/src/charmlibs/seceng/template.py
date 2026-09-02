@@ -316,11 +316,23 @@ class TemplateEngine(ops.Object):
     def base_dir(self) -> pathlib.Path:
         return self.framework.charm_dir
 
-    def process(self, *filepaths: pathlib.Path, dirty_secrets: set[str] = set()) -> None:
+    def process(
+        self,
+        *filepaths: pathlib.Path,
+        dirty_secrets: set[str] = set(),
+        installed: collections.abc.Mapping[str, str] | None = None,
+    ) -> None:
+        """Render template files and execute actions for changed entries.
+
+        ``installed`` maps each installed workload to its active version.
+        ``None`` reuses the persisted mapping, while an explicit empty mapping means nothing is installed.
+        """
         # Compute the context in which the templates will be executed.
         context = {
             'config': Namespace(),
             'secret': Namespace(),
+            'installed': Namespace(),
+            'model_proxy': Namespace(),
         }
         for name, cfg_value in self.model.config.items():
             option_type = self.framework.meta.config.get(name)
@@ -340,6 +352,28 @@ class TemplateEngine(ops.Object):
                     context['secret'].mark_dirty(name)
             else:
                 setattr(context['config'], name, cfg_value)
+
+        # ``installed`` maps each name to the version active on disk, not the
+        # configured version. A changed value dirties dependent entries so their
+        # actions fire.
+        installed_values: collections.abc.Mapping[str, JSONType]
+        if installed is None:
+            installed_values = self.state.context.get('installed', {})
+        else:
+            installed_values = installed
+        for name, version in installed_values.items():
+            setattr(context['installed'], name, version)
+
+        # The Juju model's proxy settings come from the JUJU_CHARM_* hook
+        # environment; an unset key is absent, so referencing it is skipped.
+        for key, env_var in (
+            ('http', 'JUJU_CHARM_HTTP_PROXY'),
+            ('https', 'JUJU_CHARM_HTTPS_PROXY'),
+            ('no', 'JUJU_CHARM_NO_PROXY'),
+        ):
+            proxy_value = os.environ.get(env_var)
+            if proxy_value:
+                setattr(context['model_proxy'], key, proxy_value)
 
         # Check if any of the values in the context have changed since the last
         # invocation, based on the state.
@@ -562,6 +596,12 @@ class TemplateEngine(ops.Object):
         # but the contents of the file are considered to be trusted (they are
         # embedded in the same distribution artifact as the code that calls
         # this method).
+        # envquote is exposed in the evaluation namespace alongside the config
+        # and secret namespaces, so templates can interpolate operator-supplied
+        # values into systemd EnvironmentFile= lines without an injection
+        # vector. It is merged here rather than added to the context itself,
+        # because the context's values must all be Namespaces for the
+        # dirty-tracking loops in process().
         try:
             value = eval(template, {**context, 'envquote': envquote})
         except (AttributeError, KeyError):
