@@ -607,16 +607,12 @@ class TemplateEngine(ops.Object):
         # but the contents of the file are considered to be trusted (they are
         # embedded in the same distribution artifact as the code that calls
         # this method).
-        # envquote is exposed in the evaluation namespace alongside the config
-        # and secret namespaces, so templates can interpolate operator-supplied
-        # values into systemd EnvironmentFile= lines without an injection
-        # vector. It is merged here rather than added to the context itself,
-        # because the context's values must all be Namespaces for the
-        # dirty-tracking loops in process().
+        # Merge envquote into a copy rather than context: dirty tracking requires
+        # every value in context to be a Namespace.
         try:
             value = eval(template, {**context, 'envquote': envquote})
-        except (AttributeError, KeyError):
-            raise TemplateError("referenced object does not exist")
+        except (AttributeError, KeyError) as e:
+            raise TemplateError("referenced object does not exist") from e
 
         accesses: list[AccessInfo] = []
         for namespace_name, namespace in context.items():

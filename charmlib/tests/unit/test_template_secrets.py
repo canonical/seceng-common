@@ -165,3 +165,23 @@ def test_readable_secret_renders_the_secret_value(
     context.run(context.on.config_changed(), _state(context, secret))
 
     assert rendered.read_text() == 'TOKEN=readable-secret\n', 'a readable secret must be rendered to the entry'
+
+
+def test_missing_template_key_is_chained_to_template_error(
+    context: testing.Context[SecretTemplateCharm],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    _attach_template(
+        monkeypatch,
+        tmp_path,
+        silentfail=None,
+        expression="VALUE={secret['missing']}\n",
+    )
+    monkeypatch.setenv('SCENARIO_BARE_CHARM_ERRORS', 'true')
+
+    with pytest.raises(TemplateError) as raised:
+        context.run(context.on.config_changed(), _state(context))
+
+    assert isinstance(raised.value.__cause__, KeyError)
+    assert 'missing' in str(raised.value.__cause__)
