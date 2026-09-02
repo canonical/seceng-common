@@ -162,7 +162,7 @@ def open_file_secure(
     Assumptions:
       - Directories owned by root do not have filesystem ACLs (not enforced).
       - Hardlink protections are enabled (sysctl fs.protected_hardlinks, not
-        enfoced).
+        enforced).
       - A root-owned symlink will not be pointing to a user-controlled path.
 
     Each directory component of the path can contain parameters after a '!'

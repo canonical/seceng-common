@@ -104,7 +104,7 @@ class SecEngCharmBase(ops.CharmBase):
         self.template_engine = TemplateEngine(self)
         self._stored.set_default(configured_ppas=[], installed_packages=[])
 
-    def _setup_proxies(self):
+    def _setup_proxies(self) -> None:
         """Set up proxy environment variables based on Juju model configuration."""
         # Check model configurations for proxy settings
         http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
@@ -114,11 +114,11 @@ class SecEngCharmBase(ops.CharmBase):
         if http_proxy:
             os.environ["HTTP_PROXY"] = http_proxy
             os.environ["http_proxy"] = http_proxy
-        
+
         if https_proxy:
             os.environ["HTTPS_PROXY"] = https_proxy
             os.environ["https_proxy"] = https_proxy
-            
+
         if no_proxy:
             os.environ["NO_PROXY"] = no_proxy
             os.environ["no_proxy"] = no_proxy
