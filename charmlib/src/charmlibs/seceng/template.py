@@ -11,7 +11,7 @@ given context.
 
 from __future__ import annotations
 
-__all__ = ['Namespace', 'TemplateEngine', 'TemplateError']
+__all__ = ['Namespace', 'TemplateEngine', 'TemplateError', 'envquote']
 
 import abc
 import collections.abc
@@ -36,6 +36,25 @@ from .types import JSONType
 
 class TemplateError(Exception):
     pass
+
+
+def envquote(value: str) -> str:
+    """Quote a value for interpolation into a systemd EnvironmentFile= line.
+
+    Escapes backslashes, double quotes, backticks, and dollar signs, wrapping
+    the result in double quotes. Do not add outer quotes around the
+    interpolation: systemd recognises no escape sequences inside single quotes,
+    so a value containing a single quote breaks parsing and re-enables
+    assignment injection.
+
+    Newlines and multi-line values pass through intact.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f'envquote() requires a str, got {type(value).__name__}')
+    # Backslash must be escaped first, or the backslashes introduced by the
+    # later replacements would be doubled in turn.
+    escaped = value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$')
+    return f'"{escaped}"'
 
 
 class Action(abc.ABC):
@@ -481,7 +500,7 @@ class TemplateEngine(ops.Object):
         # embedded in the same distribution artifact as the code that calls
         # this method).
         try:
-            value = eval(template, context.copy())
+            value = eval(template, {**context, 'envquote': envquote})
         except (AttributeError, KeyError):
             raise TemplateError("referenced object does not exist")
 
