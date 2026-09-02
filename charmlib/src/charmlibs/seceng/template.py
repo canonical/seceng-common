@@ -51,6 +51,8 @@ def envquote(value: str) -> str:
     """
     if not isinstance(value, str):
         raise TypeError(f'envquote() requires a str, got {type(value).__name__}')
+    if '\x00' in value:
+        raise ValueError('envquote() does not support NUL characters')
     # Backslash must be escaped first, or the backslashes introduced by the
     # later replacements would be doubled in turn.
     escaped = value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$')
@@ -498,6 +500,8 @@ class TemplateEngine(ops.Object):
                 check_hash=previous_hash,
             )
             if template_hash == previous_hash:
+                # An unchanged file yields no actions; otherwise a restart action
+                # would fire on every hook.
                 return []
             accesses = []
         elif entry.template is not None:

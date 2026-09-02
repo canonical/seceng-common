@@ -6,11 +6,8 @@
 
 """Tests for the envquote template helper.
 
-Every case asserts the exact rendered bytes: the helper's entire job is
-byte-exact escaping of operator-supplied secrets into systemd
-EnvironmentFile= lines, so an approximate assertion would let an injection
-regression survive. The engine-level tests in test_charm.py prove the helper
-is wired into the evaluation namespace; these pin the contract itself.
+Each case asserts exact bytes because escaping operator-supplied secrets must
+not permit injection into systemd EnvironmentFile= lines.
 """
 
 import pytest
@@ -65,6 +62,11 @@ def test_envquote_neutralises_an_injection_attempt() -> None:
 
 def test_envquote_wraps_an_empty_value() -> None:
     assert envquote('') == '""'
+
+
+def test_envquote_rejects_nul() -> None:
+    with pytest.raises(ValueError, match='NUL'):
+        envquote('before\x00after')
 
 
 @pytest.mark.parametrize('value', [None, 5, True, b'x', ['x']])

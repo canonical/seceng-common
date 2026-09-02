@@ -45,6 +45,12 @@ def test_parse_restart_carries_the_service_name() -> None:
     assert action.service == 'example-worker'
 
 
+def test_parse_restart_preserves_colons_in_the_service_name() -> None:
+    action = Action.parse('systemctl:restart:svc:a:b')
+    assert isinstance(action, SystemctlRestartAction)
+    assert action.service == 'svc:a:b'
+
+
 def test_parse_dpkg_reconfigure() -> None:
     assert Action.parse('dpkg-reconfigure:postfix') == DpkgReconfigureAction('postfix')
 
@@ -78,6 +84,16 @@ def test_enable_execute_shells_out_to_systemctl(monkeypatch: pytest.MonkeyPatch)
     SystemctlEnableAction('agent').execute()
 
     assert calls == [['systemctl', 'enable', 'agent']]
+
+
+def test_enable_execute_is_skipped_when_not_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: object, **kwargs: object) -> int:
+        raise AssertionError('must not shell out when not running as root')
+
+    monkeypatch.setattr('charmlibs.seceng.template.subprocess.check_call', refuse)
+    monkeypatch.setattr('charmlibs.seceng.template.os.geteuid', lambda: 1000)
+
+    SystemctlEnableAction('agent').execute()  # must not raise
 
 
 def test_enable_rejects_an_empty_service() -> None:

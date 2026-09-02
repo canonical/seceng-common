@@ -301,6 +301,98 @@ def test_install_templates_file(
         assert stat.S_IMODE(os.stat(test1_secret_file.fileno()).st_mode) == 0o640
 
 
+def test_install_templates_envquote_is_the_canonical_engine_usage(
+    context: testing.Context[SecEngCharmBase],
+    tmpdir: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The helper owns the quotes when a secret is interpolated into a unit environment file."""
+    with contextlib.ExitStack() as exit_stack:
+        secret_test1 = testing.Secret(
+            {
+                'foo': 'x"\nEVIL=1',
+            }
+        )
+        config_file_path = str(tmpdir / 'test-install-template-envquote.yaml')
+        config_file = exit_stack.enter_context(open(config_file_path, 'w'))
+        config_file.write(
+            yaml.dump(
+                {
+                    'files': [
+                        {
+                            'name': str(tmpdir / 'directory!mode=700,uid' / 'test1-env-file'),
+                            'user': pwd.getpwuid(os.getuid()).pw_name,
+                            'permission': '0o640',
+                            'template': "KEY={envquote(secret.test1['foo'])}\n",
+                        },
+                    ],
+                }
+            )  # type: ignore[no-untyped-call]
+        )
+        config_file.close()
+        monkeypatch.setattr(SecEngCharmBase, 'templates', [pathlib.Path(config_file_path)])
+        state_in = testing.State.from_context(
+            context,
+            leader=True,
+            config={
+                'test1': f'{secret_test1.id}',
+                'deployment': 'test',
+            },
+            secrets={secret_test1},
+        )
+
+        context.run(context.on.config_changed(), state_in)
+
+        assert (tmpdir / 'directory' / 'test1-env-file').read_bytes() == b'KEY="x\\"\nEVIL=1"\n'
+
+
+def test_envquote_wrapped_in_single_quotes_is_unsafe(
+    context: testing.Context[SecEngCharmBase],
+    tmpdir: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wrong surrounding quotes must keep the single-quote breakout executable."""
+    with contextlib.ExitStack() as exit_stack:
+        secret_test1 = testing.Secret(
+            {
+                'foo': "x'\nEVIL=1",
+            }
+        )
+        config_file_path = str(tmpdir / 'test-install-template-envquote-unsafe.yaml')
+        config_file = exit_stack.enter_context(open(config_file_path, 'w'))
+        config_file.write(
+            yaml.dump(
+                {
+                    'files': [
+                        {
+                            'name': str(tmpdir / 'directory!mode=700,uid' / 'unsafe-env-file'),
+                            'user': pwd.getpwuid(os.getuid()).pw_name,
+                            'permission': '0o640',
+                            'template': "KEY='{envquote(secret.test1['foo'])}'\n",
+                        },
+                    ],
+                }
+            )  # type: ignore[no-untyped-call]
+        )
+        config_file.close()
+        monkeypatch.setattr(SecEngCharmBase, 'templates', [pathlib.Path(config_file_path)])
+        state_in = testing.State.from_context(
+            context,
+            leader=True,
+            config={
+                'test1': f'{secret_test1.id}',
+                'deployment': 'test',
+            },
+            secrets={secret_test1},
+        )
+
+        context.run(context.on.config_changed(), state_in)
+
+        rendered = (tmpdir / 'directory' / 'unsafe-env-file').read_bytes()
+        assert rendered == b"KEY='\"x'\nEVIL=1\"'\n"
+        assert b'EVIL=1"\'' in rendered
+
+
 def test_install_templates_debconf(
     context: testing.Context[SecEngCharmBase],
     tmpdir: pathlib.Path,
