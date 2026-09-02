@@ -79,6 +79,10 @@ class Action(abc.ABC):
             return DpkgReconfigureAction(package)
         elif action == 'systemctl:daemon-reload':
             return SystemctlDaemonReloadAction()
+        elif action.startswith('systemctl:enable:'):
+            return SystemctlEnableAction(action.split(':', 2)[2])
+        elif action.startswith('systemctl:restart:'):
+            return SystemctlRestartAction(action.split(':', 2)[2])
         else:
             raise ValueError(f"unsupported action '{action}'")
 
@@ -126,6 +130,65 @@ class SystemctlDaemonReloadAction(Action):
             subprocess.check_call(['systemctl', 'daemon-reload'])
         else:
             logging.warning("Skipping reloading of systemd daemon because we're not running as root.")
+
+
+class SystemctlEnableAction(Action):
+    """Enable a systemd service after its unit file was written.
+
+    Paired with the unit-file entry because a first-install charm hook would
+    enable a unit file that does not exist yet. The action is idempotent.
+    """
+
+    def __init__(self, service: str):
+        if not service:
+            raise ValueError("service must not be empty")
+        self.service = service
+
+    def __eq__(self, other: typing.Any) -> bool:
+        if not isinstance(other, SystemctlEnableAction):
+            return False
+        return self.service == other.service
+
+    def __hash__(self) -> int:
+        return hash(self.service)
+
+    def execute(self) -> None:
+        if os.geteuid() == 0:
+            logging.info(f"About to enable service '{self.service}'.")
+            subprocess.check_call(['systemctl', 'enable', self.service])
+        else:
+            logging.warning(f"Skipping enable of service '{self.service}' because we're not running as root.")
+
+
+class SystemctlRestartAction(Action):
+    """Restart a systemd service after a templated file it depends on changed.
+
+    The restart is attached to the file, so it fires when the file's inputs
+    change. It is input-driven rather than output-driven: even identical
+    rendered bytes still restart the service. A template that must follow a
+    versioned artifact therefore has to read something that changes with it,
+    such as ``installed[...]``.
+    """
+
+    def __init__(self, service: str):
+        if not service:
+            raise ValueError("service must not be empty")
+        self.service = service
+
+    def __eq__(self, other: typing.Any) -> bool:
+        if not isinstance(other, SystemctlRestartAction):
+            return False
+        return self.service == other.service
+
+    def __hash__(self) -> int:
+        return hash(self.service)
+
+    def execute(self) -> None:
+        if os.geteuid() == 0:
+            logging.info(f"About to restart service '{self.service}'.")
+            subprocess.check_call(['systemctl', 'restart', self.service])
+        else:
+            logging.warning(f"Skipping restart of service '{self.service}' because we're not running as root.")
 
 
 @dataclasses.dataclass(kw_only=True)
