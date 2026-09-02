@@ -347,8 +347,15 @@ class TemplateEngine(ops.Object):
                         f" of type 'secret': {type(cfg_value).__name__}."
                     )
                     continue
-                secret_object = self.model.get_secret(id=cfg_value)
-                secret_content = secret_object.get_content(refresh=True)
+                try:
+                    secret_object = self.model.get_secret(id=cfg_value)
+                    secret_content = secret_object.get_content(refresh=True)
+                except ops.ModelError as error:
+                    # ops narrows to SecretNotFoundError only when Juju's
+                    # stderr says "not found", so a secret that exists but was
+                    # never granted arrives as the base ModelError.
+                    logging.warning(f"'{name}' secret cannot be read: {error}")
+                    continue
                 setattr(context['secret'], name, secret_content)
                 if dirty_secrets and cfg_value in dirty_secrets:
                     context['secret'].mark_dirty(name)
