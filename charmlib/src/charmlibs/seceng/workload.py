@@ -480,16 +480,15 @@ def unpack_wheelhouse(tarball: pathlib.Path, dest: pathlib.Path) -> None:
                         members.append(stripped)
                 if len(roots) > 1:
                     raise WheelhouseError('wheelhouse archive members do not share one top-level component.')
+                if roots != {'wheelhouse'}:
+                    raise WheelhouseError(f'wheelhouse is missing wheelhouse/ in archive {tarball.name!r}.')
                 archive.extractall(temporary, members=members, filter='data')
         except WheelhouseError:
             raise
         except (OSError, tarfile.TarError, EOFError) as error:
             raise WheelhouseError(f'failed to safely unpack wheelhouse {tarball.name!r}: {error}.') from error
 
-        extracted_wheelhouse = temporary / 'wheelhouse'
-        if not extracted_wheelhouse.is_dir():
-            raise WheelhouseError(f'wheelhouse is missing wheelhouse/ in archive {tarball.name!r}.')
-        if not any(path.is_file() for path in extracted_wheelhouse.rglob('*.whl')):
+        if not any(path.is_file() for path in temporary.rglob('*.whl')):
             raise WheelhouseError(f'wheelhouse archive {tarball.name!r} contains no .whl files.')
 
         if dest.is_symlink() or dest.exists():

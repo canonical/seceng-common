@@ -546,10 +546,9 @@ def test_unpack_wheelhouse_strips_one_component_and_replaces_destination(tmp_pat
     _make_tarball(
         tarball,
         (
-            ('bundle/', b''),
-            ('bundle/wheelhouse/', b''),
-            ('bundle/wheelhouse/worker.whl', b'wheel'),
-            ('bundle/installed-source', b'repo'),
+            ('wheelhouse/', b''),
+            ('wheelhouse/worker.whl', b'wheel'),
+            ('wheelhouse/installed-source', b'repo'),
         ),
     )
     dest = tmp_path / 'wheelhouse'
@@ -558,7 +557,7 @@ def test_unpack_wheelhouse_strips_one_component_and_replaces_destination(tmp_pat
 
     workload.unpack_wheelhouse(tarball, dest)
 
-    assert (dest / 'wheelhouse' / 'worker.whl').read_bytes() == b'wheel'
+    assert (dest / 'worker.whl').read_bytes() == b'wheel'
     assert (dest / 'installed-source').read_bytes() == b'repo'
     assert not (dest / 'stale').exists()
     assert not tarball.exists()
@@ -566,7 +565,7 @@ def test_unpack_wheelhouse_strips_one_component_and_replaces_destination(tmp_pat
 
 def test_unpack_wheelhouse_refuses_a_member_escaping_destination(tmp_path: pathlib.Path) -> None:
     tarball = tmp_path / 'unsafe.tar.gz'
-    _make_tarball(tarball, (('bundle/', b''), ('bundle/../../outside', b'bad')))
+    _make_tarball(tarball, (('wheelhouse/', b''), ('wheelhouse/../../outside', b'bad')))
     dest = tmp_path / 'wheelhouse'
     (dest / 'old').mkdir(parents=True)
     (dest / 'old' / 'file').write_text('old', encoding='ascii')
@@ -579,7 +578,7 @@ def test_unpack_wheelhouse_refuses_a_member_escaping_destination(tmp_path: pathl
     assert tarball.exists()
 
 
-@pytest.mark.parametrize('members', [(), (('worker.whl', b'flat'),)])
+@pytest.mark.parametrize('members', [(), (('worker.whl', b'flat'),), (('bundle/worker.whl', b'nested'),)])
 def test_unpack_wheelhouse_keeps_the_old_install_and_tarball_when_wheelhouse_is_missing(
     tmp_path: pathlib.Path,
     members: tuple[tuple[str, bytes], ...],
@@ -597,13 +596,27 @@ def test_unpack_wheelhouse_keeps_the_old_install_and_tarball_when_wheelhouse_is_
     assert tarball.exists()
 
 
+def test_unpack_wheelhouse_rejects_archive_with_no_wheel_files(tmp_path: pathlib.Path) -> None:
+    tarball = tmp_path / 'no-wheels.tar.gz'
+    _make_tarball(tarball, (('wheelhouse/', b''), ('wheelhouse/README.txt', b'no wheels here')))
+    dest = tmp_path / 'wheelhouse'
+    (dest / 'old').mkdir(parents=True)
+    (dest / 'old' / 'file').write_text('old', encoding='ascii')
+
+    with pytest.raises(workload.WheelhouseError, match='contains no .whl files'):
+        workload.unpack_wheelhouse(tarball, dest)
+
+    assert (dest / 'old' / 'file').read_text(encoding='ascii') == 'old'
+    assert tarball.exists()
+
+
 def test_unpack_wheelhouse_rejects_multiple_archive_roots(tmp_path: pathlib.Path) -> None:
     tarball = tmp_path / 'multiple-roots.tar.gz'
     _make_tarball(
         tarball,
         (
-            ('a/wheelhouse/first.whl', b'first'),
-            ('b/wheelhouse/second.whl', b'second'),
+            ('wheelhouse/first.whl', b'first'),
+            ('other/second.whl', b'second'),
         ),
     )
     dest = tmp_path / 'wheelhouse'
@@ -620,10 +633,10 @@ def test_unpack_wheelhouse_rejects_multiple_archive_roots(tmp_path: pathlib.Path
 @pytest.mark.parametrize(
     ('name', 'member_type', 'linkname'),
     [
-        ('bundle/link', tarfile.SYMTYPE, '../../outside'),
-        ('bundle/hardlink', tarfile.LNKTYPE, '../outside'),
-        ('/bundle/wheelhouse/absolute', tarfile.REGTYPE, None),
-        ('bundle/wheelhouse/device', tarfile.CHRTYPE, None),
+        ('wheelhouse/link', tarfile.SYMTYPE, '../../outside'),
+        ('wheelhouse/hardlink', tarfile.LNKTYPE, '../outside'),
+        ('/wheelhouse/absolute', tarfile.REGTYPE, None),
+        ('wheelhouse/device', tarfile.CHRTYPE, None),
     ],
 )
 def test_unpack_wheelhouse_rejects_unsafe_data_members(
@@ -634,7 +647,7 @@ def test_unpack_wheelhouse_rejects_unsafe_data_members(
 ) -> None:
     tarball = tmp_path / 'unsafe-data.tar.gz'
     with tarfile.open(tarball, mode='w:gz') as archive:
-        _add_tar_member(archive, 'bundle/wheelhouse/worker.whl', b'wheel')
+        _add_tar_member(archive, 'wheelhouse/worker.whl', b'wheel')
         info = tarfile.TarInfo(name)
         info.type = member_type
         if linkname is not None:
@@ -655,7 +668,7 @@ def test_unpack_wheelhouse_rejects_unsafe_data_members(
 
 def test_unpack_wheelhouse_cleans_stray_swap_artifacts(tmp_path: pathlib.Path) -> None:
     tarball = tmp_path / 'worker.tar.gz'
-    _make_tarball(tarball, (('bundle/wheelhouse/worker.whl', b'wheel'),))
+    _make_tarball(tarball, (('wheelhouse/worker.whl', b'wheel'),))
     dest = tmp_path / 'wheelhouse'
     (dest / 'old').mkdir(parents=True)
     (dest / 'old' / 'file').write_text('old', encoding='ascii')
@@ -673,7 +686,7 @@ def test_unpack_wheelhouse_restores_old_install_when_destination_swap_fails(
     tmp_path: pathlib.Path,
 ) -> None:
     tarball = tmp_path / 'worker.tar.gz'
-    _make_tarball(tarball, (('bundle/wheelhouse/worker.whl', b'wheel'),))
+    _make_tarball(tarball, (('wheelhouse/worker.whl', b'wheel'),))
     dest = tmp_path / 'wheelhouse'
     (dest / 'old').mkdir(parents=True)
     (dest / 'old' / 'file').write_text('old', encoding='ascii')
@@ -703,7 +716,7 @@ def test_unpack_wheelhouse_preserves_backup_when_restore_fails(
     tmp_path: pathlib.Path,
 ) -> None:
     tarball = tmp_path / 'worker.tar.gz'
-    _make_tarball(tarball, (('bundle/wheelhouse/worker.whl', b'wheel'),))
+    _make_tarball(tarball, (('wheelhouse/worker.whl', b'wheel'),))
     dest = tmp_path / 'wheelhouse'
     (dest / 'old').mkdir(parents=True)
     (dest / 'old' / 'file').write_text('old', encoding='ascii')
