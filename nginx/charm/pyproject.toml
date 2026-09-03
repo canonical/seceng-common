@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 [dependency-groups]
 test = [
     "ops[testing]",
-    "ops-scenario<8.5.2",
+    "ops-scenario<8.8.3",
     "pytest",
     "coverage[toml]",
     "jubilant",
