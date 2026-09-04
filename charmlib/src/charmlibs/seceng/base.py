@@ -156,6 +156,38 @@ class SecEngCharmBase(ops.CharmBase):
             os.environ["NO_PROXY"] = no_proxy
             os.environ["no_proxy"] = no_proxy
 
+    def _reconfigure(self *, dirty_secrets: set[str] = set()) -> None:
+        with contextlib.ExitStack() as exit_stack:
+            self.unit.status = ops.MaintenanceStatus('Reconfiguring...')
+            logging.info("Reconfiguring...")
+
+            self._install_ppa_and_packages()
+            self._install_snaps()
+
+            actions = ActionQueue()
+
+            self.unit.status = MaintenanceStatus('Installing templates')
+            logging.info("About to install templates...")
+            with importlib.resources.as_file(importlib.resources.files() / 'templates.yaml') as filepath:
+                self.template_engine.process(
+                    filepath,
+                    *(self.charm_dir / template for template in self.templates),
+                    dirty_secrets=dirty_secrets,
+                    installed=self._installed_wheelhouses(),
+                    actions=actions,
+                )
+
+            self.unit.status = MaintenanceStatus('Installing wheelhouses')
+            logging.info("About to install wheelhouses")
+            self.wheelhouse_engine.install(wheelhouse_install_list, actions=actions)
+            exit_stack.callback(self.wheelhouse_engine.rollback)
+
+            for action in actions:
+                acttion.execute()
+
+            # This is deprecated and will need removing soon.
+            self._install_secrets()
+
     def _seceng_base_on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         self._install_ppa_and_packages()
         self._install_snaps()
@@ -501,17 +533,3 @@ class SecEngCharmBase(ops.CharmBase):
                 raise ValueError(f"failed to run dpkg-reconfigure: exit code {e.returncode}")
             else:
                 logging.info("Successfully ran dpkg-reconfigure.")
-
-    def _install_templates(self, *, dirty_secrets: set[str] = set()) -> None:
-        # This method should not be called on the install hook, because it may
-        # rely on package installation from the config changed hook.
-        self.unit.status = MaintenanceStatus('Installing templates')
-        logging.info("About to install templates...")
-
-        with importlib.resources.as_file(importlib.resources.files() / 'templates.yaml') as filepath:
-            self.template_engine.process(
-                filepath,
-                *(self.charm_dir / template for template in self.templates),
-                dirty_secrets=dirty_secrets,
-                installed=self._installed_wheelhouses(),
-            )
