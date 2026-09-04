@@ -11,7 +11,7 @@ given context.
 
 from __future__ import annotations
 
-__all__ = ['Namespace', 'TemplateEngine', 'TemplateError']
+__all__ = ['Namespace', 'TemplateEngine', 'TemplateError', 'envquote']
 
 import abc
 import collections.abc
@@ -38,75 +38,25 @@ class TemplateError(Exception):
     pass
 
 
-class Action(abc.ABC):
-    @abc.abstractmethod
-    def execute(self) -> None:
-        raise NotImplementedError
+def envquote(value: str) -> str:
+    """Quote a value for interpolation into a systemd EnvironmentFile= line.
 
-    @abc.abstractmethod
-    def __eq__(self, other: typing.Any) -> bool:
-        # Subclasses of Action must implement __eq__ and __hash__ so that they
-        # can be compared to each other to allow duplicates to be removed.
-        raise NotImplementedError
+    Escapes backslashes, double quotes, backticks, and dollar signs, wrapping
+    the result in double quotes. Do not add outer quotes around the
+    interpolation: systemd recognises no escape sequences inside single quotes,
+    so a value containing a single quote breaks parsing and re-enables
+    assignment injection.
 
-    @abc.abstractmethod
-    def __hash__(self) -> int:
-        raise NotImplementedError
-
-    @staticmethod
-    def parse(action: str) -> Action:
-        if action.startswith('dpkg-reconfigure:'):
-            package = action.split(':', 1)[1]
-            return DpkgReconfigureAction(package)
-        elif action == 'systemctl:daemon-reload':
-            return SystemctlDaemonReloadAction()
-        else:
-            raise ValueError(f"unsupported action '{action}'")
-
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls, source_type: typing.Any, handler: pydantic.GetCoreSchemaHandler
-    ) -> pydantic_core.CoreSchema:
-        return pydantic_core.core_schema.no_info_after_validator_function(cls.parse, handler(str))
-
-
-class DpkgReconfigureAction(Action):
-    def __init__(self, package: str):
-        if not package:
-            raise ValueError("package must not be empty")
-        self.package = package
-
-    def __eq__(self, other: typing.Any) -> bool:
-        if not isinstance(other, DpkgReconfigureAction):
-            return False
-        return self.package == other.package
-
-    def __hash__(self) -> int:
-        return hash(self.package)
-
-    def execute(self) -> None:
-        # FIXME: euid check is for tests. Tests should however provide mock commands, instead.
-        if os.geteuid() == 0:
-            logging.info(f"About to reconfigure package '{self.package}'.")
-            subprocess.check_call(['dpkg-reconfigure', '-fnoninteractive', self.package])
-        else:
-            logging.warning(f"Skipping reconfigure of package '{self.package}' because we're not running as root.")
-
-
-class SystemctlDaemonReloadAction(Action):
-    def __eq__(self, other: typing.Any) -> bool:
-        return type(other) is type(self)
-
-    def __hash__(self) -> int:
-        return hash(type(self))
-
-    def execute(self) -> None:
-        # FIXME: euid check is for tests. Tests should however provide mock commands, instead.
-        if os.geteuid() == 0:
-            logging.info("About to reload systemd daemon.")
-            subprocess.check_call(['systemctl', 'daemon-reload'])
-        else:
-            logging.warning("Skipping reloading of systemd daemon because we're not running as root.")
+    Newlines and multi-line values pass through intact.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f'envquote() requires a str, got {type(value).__name__}')
+    if '\x00' in value:
+        raise ValueError('envquote() does not support NUL characters')
+    # Backslash must be escaped first, or the backslashes introduced by the
+    # later replacements would be doubled in turn.
+    escaped = value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$')
+    return f'"{escaped}"'
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -234,11 +184,24 @@ class TemplateEngine(ops.Object):
     def base_dir(self) -> pathlib.Path:
         return self.framework.charm_dir
 
-    def process(self, *filepaths: pathlib.Path, dirty_secrets: set[str] = set()) -> None:
+    def process(
+        self,
+        *filepaths: pathlib.Path,
+        dirty_secrets: set[str] = set(),
+        installed: collections.abc.Mapping[str, str] | None = None,
+        actions: ActionQueue,
+    ) -> None:
+        """Render template files and execute actions for changed entries.
+
+        ``installed`` maps each installed workload to its active version.
+        ``None`` reuses the persisted mapping, while an explicit empty mapping means nothing is installed.
+        """
         # Compute the context in which the templates will be executed.
         context = {
             'config': Namespace(),
             'secret': Namespace(),
+            'installed': Namespace(),
+            'model_proxy': Namespace(),
         }
         for name, cfg_value in self.model.config.items():
             option_type = self.framework.meta.config.get(name)
@@ -251,13 +214,42 @@ class TemplateEngine(ops.Object):
                         f" of type 'secret': {type(cfg_value).__name__}."
                     )
                     continue
-                secret_object = self.model.get_secret(id=cfg_value)
-                secret_content = secret_object.get_content(refresh=True)
+                try:
+                    secret_object = self.model.get_secret(id=cfg_value)
+                    secret_content = secret_object.get_content(refresh=True)
+                except ops.ModelError as error:
+                    # ops narrows to SecretNotFoundError only when Juju's
+                    # stderr says "not found", so a secret that exists but was
+                    # never granted arrives as the base ModelError.
+                    logging.warning(f"'{name}' secret cannot be read: {error}")
+                    continue
                 setattr(context['secret'], name, secret_content)
                 if dirty_secrets and cfg_value in dirty_secrets:
                     context['secret'].mark_dirty(name)
             else:
                 setattr(context['config'], name, cfg_value)
+
+        # ``installed`` maps each name to the version active on disk, not the
+        # configured version. A changed value dirties dependent entries so their
+        # actions fire.
+        installed_values: collections.abc.Mapping[str, JSONType]
+        if installed is None:
+            installed_values = self.state.context.get('installed', {})
+        else:
+            installed_values = installed
+        for name, version in installed_values.items():
+            setattr(context['installed'], name, version)
+
+        # The Juju model's proxy settings come from the JUJU_CHARM_* hook
+        # environment; an unset key is absent, so referencing it is skipped.
+        for key, env_var in (
+            ('http', 'JUJU_CHARM_HTTP_PROXY'),
+            ('https', 'JUJU_CHARM_HTTPS_PROXY'),
+            ('no', 'JUJU_CHARM_NO_PROXY'),
+        ):
+            proxy_value = os.environ.get(env_var)
+            if proxy_value:
+                setattr(context['model_proxy'], key, proxy_value)
 
         # Check if any of the values in the context have changed since the last
         # invocation, based on the state.
@@ -275,33 +267,11 @@ class TemplateEngine(ops.Object):
         self.state.context = {ctx_name: dict(ctx_namespace.items()) for ctx_name, ctx_namespace in context.items()}
 
         # Process the template files.
-        actions: deque[Action] = deque()
         for filepath in filepaths:
             self._process_template_file(filepath, context, actions)
-        for action in actions:
-            action.execute()
         self._stored.state = self.state.model_dump()
 
-    def _process_template_file(self, filepath: pathlib.Path, context: Context, actions: deque[Action]) -> None:
-        def update_actions(new_actions: collections.abc.Iterable[Action]) -> None:
-            # This function updates actions (in the outer scope) to add the
-            # entries in new_actions, but without duplicating entries in
-            # actions unless necessary. The order of items in actions is not
-            # changed and nor is the order of items in new_actions. However,
-            # new items can be interleaved. If actions already contains an
-            # identical (compared with ==) item, a new one is not added, unless
-            # the previously mentioned constraints cannot be kept.
-            # Example:
-            #  - actions is: A, B, C, A
-            #  - new_actions is: C, B, A
-            #  - result is: A, B, C, B, A
-            search_index = 0
-            for action in new_actions:
-                try:
-                    search_index = actions.index(action, search_index)
-                except ValueError:
-                    actions.insert(search_index, action)
-
+    def _process_template_file(self, filepath: pathlib.Path, context: Context, actions: ActionQueue) -> None:
         with open(filepath, 'r') as file:
             try:
                 template_config = TemplateConfig.model_validate(yaml.safe_load(file))  # type: ignore[no-untyped-call]
@@ -311,11 +281,11 @@ class TemplateEngine(ops.Object):
 
         for debconf_entry in template_config.debconf:
             entry_actions = self._process_debconf_entry(debconf_entry, context=context)
-            update_actions(entry_actions)
+            actions.update_actions(entry_actions)
 
         for file_entry in template_config.files:
             entry_actions = self._process_file_entry(file_entry, context=context)
-            update_actions(entry_actions)
+            actions.update_actions(entry_actions)
 
     def _process_debconf_entry(self, entry: DebconfConfig, *, context: Context) -> collections.abc.Iterable[Action]:
         previous_hash = self._check_dirty(f'debconf:{entry.name}', context=context)
@@ -380,6 +350,10 @@ class TemplateEngine(ops.Object):
                 create_parents=True,
                 check_hash=previous_hash,
             )
+            if template_hash == previous_hash:
+                # An unchanged file yields no actions; otherwise a restart action
+                # would fire on every hook.
+                return []
             accesses = []
         elif entry.template is not None:
             template_hash = hashlib.sha256(entry.template.encode('utf-8')).hexdigest()
@@ -477,10 +451,12 @@ class TemplateEngine(ops.Object):
         # but the contents of the file are considered to be trusted (they are
         # embedded in the same distribution artifact as the code that calls
         # this method).
+        # Merge envquote into a copy rather than context: dirty tracking requires
+        # every value in context to be a Namespace.
         try:
-            value = eval(template, context.copy())
-        except (AttributeError, KeyError):
-            raise TemplateError("referenced object does not exist")
+            value = eval(template, {**context, 'envquote': envquote})
+        except (AttributeError, KeyError) as e:
+            raise TemplateError("referenced object does not exist") from e
 
         accesses: list[AccessInfo] = []
         for namespace_name, namespace in context.items():
