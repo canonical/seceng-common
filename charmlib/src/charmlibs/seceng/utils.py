@@ -8,6 +8,8 @@ Module providing utility functions and types for charms used by the Security
 Engineering team at Canonical.
 """
 
+from __future__ import annotations
+
 import collections.abc
 import contextlib
 import functools
@@ -162,7 +164,7 @@ def open_file_secure(
     Assumptions:
       - Directories owned by root do not have filesystem ACLs (not enforced).
       - Hardlink protections are enabled (sysctl fs.protected_hardlinks, not
-        enfoced).
+        enforced).
       - A root-owned symlink will not be pointing to a user-controlled path.
 
     Each directory component of the path can contain parameters after a '!'
@@ -345,3 +347,53 @@ def copy_file_secure(
     except SameDigest:
         pass
     return digest
+
+
+def envquote(value: str) -> str:
+    """Quote a value for interpolation into a systemd EnvironmentFile= line.
+
+    Escapes backslashes, double quotes, backticks, and dollar signs, wrapping
+    the result in double quotes. Do not add outer quotes around the
+    interpolation: systemd recognises no escape sequences inside single quotes,
+    so a value containing a single quote breaks parsing and re-enables
+    assignment injection.
+
+    Newlines and multi-line values pass through intact.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f'envquote() requires a str, got {type(value).__name__}')
+    if '\x00' in value:
+        raise ValueError('envquote() does not support NUL characters')
+    # Backslash must be escaped first, or the backslashes introduced by the
+    # later replacements would be doubled in turn.
+    escaped = value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$')
+    return f'"{escaped}"'
+
+
+def clean_env() -> dict[str, str]:
+    """Return the ambient environment without ``VIRTUAL_ENV`` or ``PYTHONPATH``.
+
+    The charm runs inside its own virtualenv, and either variable would leak it
+    into an unrelated workload interpreter. Everything else is inherited, so
+    proxy configuration and locale reach the subprocess.
+    """
+    env = os.environ.copy()
+    env.pop('VIRTUAL_ENV', None)
+    env.pop('PYTHONPATH', None)
+    return env
+
+
+_STDERR_DETAIL_LIMIT = 200
+
+
+def stderr_detail(stderr: bytes) -> str:
+    """Render the last non-blank line of stderr as a ``': ...'`` message suffix.
+
+    Returns the empty string when there is nothing to report, so the suffix can
+    be interpolated unconditionally. A command that gives up states the reason
+    on its final line, and that line is what has to survive into a Juju status
+    message; it is truncated, because a status message is not a log. Output
+    that is not valid UTF-8 is decoded with replacements rather than refused.
+    """
+    lines = [line.strip() for line in stderr.decode('utf-8', errors='replace').splitlines() if line.strip()]
+    return f': {lines[-1][:_STDERR_DETAIL_LIMIT]}' if lines else ''

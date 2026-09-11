@@ -168,9 +168,21 @@ def test_install_secrets_debconf(
             },
         )
 
-        debconf_db_path = str(tmpdir / 'debconf.dat')
-        os.environ['DEBCONF_DB_REPLACE'] = f'File{{filename:{debconf_db_path} backup:no}}'
-        exit_stack.callback(os.environ.pop, 'DEBCONF_DB_REPLACE')
+        debconf_conf_path = tmpdir / 'debconf.conf'
+        debconf_db_path = tmpdir / 'debconf.dat'
+        debconf_tmpl_path = tmpdir / 'templates.dat'
+        debconf_conf_path.write_text(
+            'Config: config\n'
+            'Templates: templates\n\n'
+            'Name: config\n'
+            'Driver: File\n'
+            f'Filename: {debconf_db_path}\n\n'
+            'Name: templates\n'
+            'Driver: File\n'
+            f'Filename: {debconf_tmpl_path}\n'
+        )
+        monkeypatch.setenv('DEBCONF_SYSTEMRC', str(debconf_conf_path))
+        monkeypatch.setenv('DEBCONF_DB_REPLACE', f'File{{filename:{debconf_db_path} backup:no}}')
 
         # Act:
         context.run(context.on.config_changed(), state_in)
@@ -303,9 +315,21 @@ def test_install_templates_debconf(
             },
         )
 
-        debconf_db_path = str(tmpdir / 'debconf.dat')
-        os.environ['DEBCONF_DB_REPLACE'] = f'File{{filename:{debconf_db_path} backup:no}}'
-        exit_stack.callback(os.environ.pop, 'DEBCONF_DB_REPLACE')
+        debconf_conf_path = tmpdir / 'debconf.conf'
+        debconf_db_path = tmpdir / 'debconf.dat'
+        debconf_tmpl_path = tmpdir / 'templates.dat'
+        debconf_conf_path.write_text(
+            'Config: config\n'
+            'Templates: templates\n\n'
+            'Name: config\n'
+            'Driver: File\n'
+            f'Filename: {debconf_db_path}\n\n'
+            'Name: templates\n'
+            'Driver: File\n'
+            f'Filename: {debconf_tmpl_path}\n'
+        )
+        monkeypatch.setenv('DEBCONF_SYSTEMRC', str(debconf_conf_path))
+        monkeypatch.setenv('DEBCONF_DB_REPLACE', f'File{{filename:{debconf_db_path} backup:no}}')
 
         # Act:
         context.run(context.on.config_changed(), state_in)
