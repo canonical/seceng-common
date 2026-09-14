@@ -10,7 +10,7 @@ charmlibs-seceng @ git+https://github.com/canonical/seceng-common@792fc76d201a7a
     # via canonical-seceng-server (pyproject.toml)
 importlib-metadata==8.7.1
     # via opentelemetry-api
-opentelemetry-api==1.40.0
+opentelemetry-api==1.44.0
     # via ops
 ops==3.7.0
     # via
