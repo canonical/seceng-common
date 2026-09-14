@@ -15,6 +15,7 @@ import subprocess
 import shlex
 import re
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from smtplib import SMTP
 from email.utils import parseaddr
@@ -27,19 +28,46 @@ SMTP_SERVER = 'mx.canonical.com'
 SMTP_PORT = 25
 CONFIG_PATH = f'/etc/seceng/{os.environ.get("USER")}'
 
-class SendNotification:
-    def __init__(self, json=None, command=None, sender=None, to=None, subject=None, content=None, cc=None, bcc=None, include_bcc=None, add_prefix=None, send_summary=None, replace_to=None, only_on_stderr=False):
 
-        to = self.normalize_emails(to)
-        cc = self.normalize_emails(cc)
-        bcc = self.normalize_emails(bcc)
-        include_bcc = self.normalize_emails(include_bcc)
-        send_summary = self.normalize_emails(send_summary)
-        replace_to = self.normalize_emails(replace_to)
+@dataclass
+class EmailParams:
+    sender: str = None
+    to: list = field(default_factory=list)
+    subject: str = None
+    cc: list = field(default_factory=list)
+    bcc: list = field(default_factory=list)
+
+
+@dataclass
+class ConfigOverrides:
+    include_bcc: list = field(default_factory=list)
+    add_prefix: str = None
+    send_summary: list = field(default_factory=list)
+    replace_to: list = field(default_factory=list)
+    only_on_stderr: bool = False
+
+
+class SendNotification:
+    def __init__(self, email_params=None, config_overrides=None, json=None, command=None):
+        if email_params is None:
+            email_params = EmailParams()
+        if config_overrides is None:
+            config_overrides = ConfigOverrides()
+
+        sender = email_params.sender
+        subject = email_params.subject
+        to = self.normalize_emails(email_params.to)
+        cc = self.normalize_emails(email_params.cc)
+        bcc = self.normalize_emails(email_params.bcc)
+
+        config_overrides.include_bcc = self.normalize_emails(config_overrides.include_bcc)
+        config_overrides.send_summary = self.normalize_emails(config_overrides.send_summary)
+        config_overrides.replace_to = self.normalize_emails(config_overrides.replace_to)
 
         self.notifications = []
+        self.command_returncode = 0
 
-        self.config = Configuration(include_bcc, add_prefix, send_summary, replace_to, only_on_stderr)
+        self.config = Configuration(config_overrides)
 
         if not sender and self.config.sender:
             sender = self.config.sender
@@ -151,25 +179,38 @@ class SendNotification:
                 sys.exit(1)
 
         logging.info(f'Running command: {command_parts}')
-        output = ''
-        result = None
+        stdout_lines = []
+        stderr_lines = []
         try:
-            result = subprocess.run(command_parts, capture_output=True, text=True)
-            output = result.stdout
-            if result.stderr:
-                logging.warning(result.stderr)
-                output += f'\nERRORS:\n\n{result.stderr}'
+            with subprocess.Popen(command_parts, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+                for line in proc.stdout:
+                    print(line, end='', flush=True)
+                    stdout_lines.append(line)
+                for line in proc.stderr:
+                    print(line, end='', file=sys.stderr, flush=True)
+                    stderr_lines.append(line)
+                proc.wait()
 
-            if self.config.only_on_stderr and not result.stderr:
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
+            self.command_returncode = proc.returncode
+            output = stdout
+            if stderr:
+                logging.warning(stderr)
+                output += f'\nERRORS:\n\n{stderr}'
+
+            if self.config.only_on_stderr and not stderr:
                 return None
         except Exception as e:
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
             output = f"An unexpected error occurred: {e}"
-            if result.stdout:
-                output += f'\nSTDOUT:\n\n{result.stdout}'
-            if result.stderr:
-                output += f'\nSTDERR:\n\n{result.stderr}'
+            if stdout:
+                output += f'\nSTDOUT:\n\n{stdout}'
+            if stderr:
+                output += f'\nSTDERR:\n\n{stderr}'
 
-        if self.config.only_on_stderr and not result.stderr:
+        if self.config.only_on_stderr and not ''.join(stderr_lines):
             return None
 
         # Try validate the output as a JSON file
@@ -181,6 +222,7 @@ class SendNotification:
             return output
 
     def send(self, debuglevel=0):
+        fails = 0
         for notification in self.notifications:
             try:
                 smtp_config = self.config.get_smtp_config(notification.sender)
@@ -199,18 +241,22 @@ class SendNotification:
                     logging.info('Email sent successfully!')
             except Exception as e:
                 logging.error(f'Error sending notification: {e}')
+                fails += 1
+        return fails
 
     def __str__(self):
         return '\n\n\n\n'.join([str(f"HEADER TO: {n.all_receivers}\n{n}") for n in self.notifications])
 
 
 class Configuration:
-    def __init__(self, include_bcc=[], add_prefix=None, send_summary=[], replace_to=[], only_on_stderr=False, section_name='default'):
-        self.include_bcc = include_bcc
-        self.add_prefix = add_prefix
-        self.send_summary = send_summary
-        self.replace_to = replace_to
-        self.only_on_stderr = only_on_stderr
+    def __init__(self, overrides=None, section_name='default'):
+        if overrides is None:
+            overrides = ConfigOverrides()
+        self.include_bcc = overrides.include_bcc
+        self.add_prefix = overrides.add_prefix
+        self.send_summary = overrides.send_summary
+        self.replace_to = overrides.replace_to
+        self.only_on_stderr = overrides.only_on_stderr
         self.smtp_config = {'default': {'server': SMTP_SERVER, 'port': SMTP_PORT }}
 
         self.sender = None
@@ -333,17 +379,34 @@ def main():
 
     logging.info(f'{TITLE} started')
 
-    sn = SendNotification(json=args.json, command=args.exec, sender=args.email_from,
-                          to=args.email_to, subject=args.email_subject, cc=args.email_cc, bcc=args.email_bcc,
-                          include_bcc=args.include_bcc, add_prefix=args.add_prefix,
-                          send_summary=args.send_summary, replace_to=args.replace_to,
-                          only_on_stderr=args.only_on_stderr)
+    email_params = EmailParams(
+        sender=args.email_from,
+        to=args.email_to,
+        subject=args.email_subject,
+        cc=args.email_cc,
+        bcc=args.email_bcc,
+    )
+    config_overrides = ConfigOverrides(
+        include_bcc=args.include_bcc,
+        add_prefix=args.add_prefix,
+        send_summary=args.send_summary,
+        replace_to=args.replace_to,
+        only_on_stderr=args.only_on_stderr,
+    )
+    sn = SendNotification(email_params=email_params,
+                          config_overrides=config_overrides,
+                          json=args.json,
+                          command=args.exec)
 
     if args.dry_run:
         logging.info(sn)
     else:
         # Rebalance the verbose number to level with the debuglevel from SMTP
-        sn.send(debuglevel=args.verbose-3)
+        fails = sn.send(debuglevel=args.verbose-3)
+        if sn.command_returncode:
+            sys.exit(sn.command_returncode)
+        if fails:
+            sys.exit(fails)
 
     logging.info(f'{TITLE} ended')
 
