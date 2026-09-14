@@ -16,7 +16,7 @@ ops==3.7.0
     # via
     #   canonical-seceng-nginx (pyproject.toml)
     #   charmlibs-seceng
-pydantic==2.12.5
+pydantic==2.13.5
     # via charmlibs-seceng
 pydantic-core==2.41.5
     # via pydantic
