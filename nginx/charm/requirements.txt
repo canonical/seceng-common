@@ -8,7 +8,7 @@ annotated-types==0.7.0
     # via pydantic
 charmlibs-seceng @ git+https://github.com/canonical/seceng-common@a84c26c89dde2020e5b33788f013fe55f279ca15#subdirectory=charmlib
     # via canonical-seceng-nginx (pyproject.toml)
-importlib-metadata==8.7.1
+importlib-metadata==9.0.1
     # via opentelemetry-api
 opentelemetry-api==1.40.0
     # via ops
