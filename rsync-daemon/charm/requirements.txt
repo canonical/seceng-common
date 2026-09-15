@@ -14,7 +14,7 @@ importlib-metadata==9.0.0
     #   ops
 opentelemetry-api==1.44.0
     # via ops
-ops==3.8.1
+ops==3.8.2
     # via
     #   canonical-seceng-rsync-daemon (pyproject.toml)
     #   charmlibs-seceng
