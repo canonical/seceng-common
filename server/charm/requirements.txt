@@ -4,7 +4,7 @@
 #
 #    pip-compile --strip-extras
 #
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
 charmlibs-seceng @ git+https://github.com/canonical/seceng-common@792fc76d201a7a52eb63bb61b10284c69fcf038f#subdirectory=charmlib
     # via canonical-seceng-server (pyproject.toml)
