@@ -1,12 +1,17 @@
 #!/bin/bash -e
 
-USAGE="Usage: $0 URL DIR CREDENTIAL"
+USAGE="Usage: $0 URL DIR CREDENTIAL [DEPTH]"
 URL="${1:?$USAGE}"
 DIR="${2:?$USAGE}"
 CREDENTIAL="${3:?$USAGE}"
+DEPTH=${4:-}
 
 if [ ! -d "$DIR/.git" ]; then
-    if GIT_CREDENTIAL="$CREDENTIAL" /usr/bin/git clone "$URL" "$DIR"; then
+    CLONE_ARGS=""
+    if [ -n "$DEPTH" ]; then
+        CLONE_ARGS="--depth $DEPTH"
+    fi
+    if GIT_CREDENTIAL="$CREDENTIAL" /usr/bin/git clone $CLONE_ARGS "$URL" "$DIR"; then
 		echo "Cloned $DIR repository."
 	else
 		echo "Error cloning $DIR repository."
