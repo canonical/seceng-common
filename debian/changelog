@@ -1,8 +1,9 @@
-seceng-common (1.6.0) noble; urgency=medium
+seceng-common (1.5.1) noble; urgency=medium
 
+  [ Federico Quattrin]
   * git-sync: add optional DEPTH argument for shallow clones
 
- -- Federico Quattrin <federico.quattrin@canonical.com>  Wed, 07 Oct 2026 10:00:00 +0000
+ -- Ian Constantin <ian.constantin@canonical.com>  Tue, 13 Oct 2026 17:03:33 +0300
 
 seceng-common (1.5.0) noble; urgency=medium
 
