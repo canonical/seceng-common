@@ -18,7 +18,7 @@ ops==3.7.0
     #   charmlibs-seceng
 pydantic==2.12.5
     # via charmlibs-seceng
-pydantic-core==2.41.5
+pydantic-core==2.50.2
     # via pydantic
 pyyaml==6.0.3
     # via ops
