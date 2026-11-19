@@ -32,5 +32,5 @@ typing-inspection==0.4.5
     # via pydantic
 websocket-client==1.9.2
     # via ops
-zipp==3.23.1
+zipp==4.1.2
     # via importlib-metadata
