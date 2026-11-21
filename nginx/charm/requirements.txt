@@ -20,7 +20,7 @@ pydantic==2.14.4
     # via charmlibs-seceng
 pydantic-core==2.50.5
     # via pydantic
-pyyaml==6.0.3
+pyyaml==6.0.4
     # via ops
 typing-extensions==4.16.0
     # via
